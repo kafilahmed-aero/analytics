@@ -1,0 +1,74 @@
+const activeSignalManager = require('../../src/services/activeSignalManager.service');
+const resetTestState = require('../helpers/resetState.helper');
+
+const runUnitTests = () => {
+  resetTestState();
+  const results = { name: 'Unit Tests (ActiveSignalManager)', passed: 0, failed: 0, errors: [] };
+
+  // Test 1: Duplicate Signal Processing Rejection
+  try {
+    const rawSig = {
+      id: 'UNIT-DUP-001',
+      channel: 'VIP_ALGO',
+      symbol: 'EURUSD',
+      type: 'BUY',
+      entry: 1.0800,
+      sl: 1.0750,
+      tp1: 1.0850,
+      createdAt: new Date(Date.now() + 10000).toISOString(),
+    };
+
+    const firstResult = activeSignalManager.processRawSignal(rawSig);
+    const secondResult = activeSignalManager.processRawSignal(rawSig);
+
+    if (
+      firstResult.success === true &&
+      secondResult.success === false &&
+      secondResult.reason === 'duplicate_signal_ignored' &&
+      activeSignalManager.activeSignals.size === 1
+    ) {
+      results.passed += 1;
+    } else {
+      results.failed += 1;
+      results.errors.push('Duplicate signal was not rejected cleanly');
+    }
+  } catch (err) {
+    results.failed += 1;
+    results.errors.push(`Duplicate signal error: ${err.message}`);
+  }
+
+  // Test 2: Historical Watermark Rejection
+  try {
+    resetTestState();
+    const oldSig = {
+      id: 'UNIT-OLD-002',
+      channel: 'VIP_ALGO',
+      symbol: 'EURUSD',
+      type: 'BUY',
+      entry: 1.0800,
+      sl: 1.0750,
+      tp1: 1.0850,
+      createdAt: new Date(Date.now() - 3600000).toISOString(), // 1 hour old
+    };
+
+    const result = activeSignalManager.processRawSignal(oldSig);
+
+    if (
+      result.success === false &&
+      result.reason === 'historical_signal_ignored' &&
+      activeSignalManager.activeSignals.size === 0
+    ) {
+      results.passed += 1;
+    } else {
+      results.failed += 1;
+      results.errors.push('Historical signal older than watermark was not rejected');
+    }
+  } catch (err) {
+    results.failed += 1;
+    results.errors.push(`Historical signal error: ${err.message}`);
+  }
+
+  return results;
+};
+
+module.exports = runUnitTests;
