@@ -5,12 +5,11 @@ const fxDeskProService = require('../services/fxdeskpro.service');
 
 const testConnection = asyncHandler(async (req, res) => {
   const connectionResult = await fxDeskProService.checkConnection();
-  const statusCode = connectionResult.connected ? HTTP_STATUS.OK : HTTP_STATUS.SERVICE_UNAVAILABLE;
   const message = connectionResult.connected
     ? 'Successfully connected to FX Desk Pro service'
     : 'Failed to connect to FX Desk Pro service';
 
-  return res.status(statusCode).json(new ApiResponse(statusCode, connectionResult, message));
+  return res.status(HTTP_STATUS.OK).json(new ApiResponse(HTTP_STATUS.OK, connectionResult, message));
 });
 
 const getHealthStatus = asyncHandler(async (req, res) => {

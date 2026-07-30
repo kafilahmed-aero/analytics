@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Network, Send, CheckCircle2, XCircle, HelpCircle } from 'lucide-react';
 import { testFxDeskProConnection } from '../services/fxdeskpro.service';
 
@@ -6,7 +6,7 @@ export const FxDeskProConnectionCard = () => {
   const [statusState, setStatusState] = useState({
     tested: false,
     connected: false,
-    baseUrl: 'http://localhost:4000',
+    baseUrl: 'Loading...',
     lastChecked: null,
     lastSuccessful: null,
     error: null,
@@ -31,7 +31,7 @@ export const FxDeskProConnectionCard = () => {
       setStatusState((prev) => ({
         tested: true,
         connected: false,
-        baseUrl: prev.baseUrl,
+        baseUrl: prev.baseUrl !== 'Loading...' ? prev.baseUrl : 'N/A',
         lastChecked: new Date().toISOString(),
         lastSuccessful: prev.lastSuccessful,
         error: err.message || 'Connection test failed',
@@ -40,6 +40,10 @@ export const FxDeskProConnectionCard = () => {
       setTesting(false);
     }
   };
+
+  useEffect(() => {
+    handleTestConnection();
+  }, []);
 
   const renderStatusBadge = () => {
     if (!statusState.tested) {
