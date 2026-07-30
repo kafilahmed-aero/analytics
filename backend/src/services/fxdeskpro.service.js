@@ -114,6 +114,18 @@ class FxDeskProService {
   async fetchActiveSignals() {
     return await this._request('/api/signals/active');
   }
+
+  /**
+   * Fetch completed signal outcomes from FX Desk Pro using opaque cursor.
+   * Treats cursor as a completely opaque string token without decoding it.
+   */
+  async fetchCompletedOutcomes(cursor = '', limit = 100) {
+    const params = new URLSearchParams();
+    if (cursor) params.append('cursor', cursor);
+    if (limit) params.append('limit', limit);
+    const queryString = params.toString() ? `?${params.toString()}` : '';
+    return await this._request(`/api/signals/outcomes${queryString}`);
+  }
 }
 
 module.exports = new FxDeskProService();

@@ -2,6 +2,7 @@ const runUnitTests = require('./unit/signalManager.test');
 const runLifecycleTests = require('./integration/lifecycle.test');
 const runSimultaneousTests = require('./integration/simultaneousEvents.test');
 const runDashboardApiTests = require('./integration/dashboardApi.test');
+const runOutcomeSyncTests = require('./integration/outcomeSync.test');
 const runFailureTests = require('./integration/failureScenarios.test');
 const runHighVolumeStressTest = require('./stress/highVolume.test');
 
@@ -18,6 +19,7 @@ const main = async () => {
   suites.push(runLifecycleTests());
   suites.push(runSimultaneousTests());
   suites.push(runDashboardApiTests());
+  suites.push(runOutcomeSyncTests());
   suites.push(await runFailureTests());
   suites.push(runHighVolumeStressTest());
 

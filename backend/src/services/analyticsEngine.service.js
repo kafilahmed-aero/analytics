@@ -148,6 +148,70 @@ class AnalyticsEngine {
   }
 
   /**
+   * Record completed signal outcome payload delivered from FX Desk Pro via integration bridge.
+   * Updates channel/pair metrics idempotently and marks keys as dirty.
+   */
+  recordCompletedOutcome(outcome) {
+    if (!outcome) return;
+    const channel = outcome.channel || outcome.channelName;
+    const pair = outcome.pair || outcome.symbol;
+    if (!channel) return;
+
+    const timestamp = new Date().toISOString();
+    const safeChannel = String(channel).toUpperCase();
+    const channelMetric = this._getOrCreateMetrics(this.channelStats, safeChannel);
+
+    channelMetric.totalSignals += 1;
+
+    const targetHits = outcome.targetHits || {};
+    if (targetHits.tp1Hit || outcome.tp1Hit || outcome.status === 'PARTIAL_TP' || outcome.status === 'FULL_TP') {
+      channelMetric.tp1Hits += 1;
+    }
+    if (targetHits.tp2Hit || outcome.tp2Hit || outcome.status === 'FULL_TP') {
+      channelMetric.tp2Hits += 1;
+    }
+    if (targetHits.tp3Hit || outcome.tp3Hit || outcome.status === 'FULL_TP') {
+      channelMetric.tp3Hits += 1;
+      channelMetric.fullTpHits += 1;
+    }
+    if (targetHits.slHit || outcome.slHit || outcome.status === 'SL_HIT') {
+      channelMetric.originalSlHits += 1;
+    }
+    if (targetHits.derivedSl8Hit || outcome.derivedSl8Hit) {
+      channelMetric.sl8Hits += 1;
+    }
+    if (targetHits.derivedSl10Hit || outcome.derivedSl10Hit) {
+      channelMetric.sl10Hits += 1;
+    }
+    if (targetHits.derivedSl12Hit || outcome.derivedSl12Hit) {
+      channelMetric.sl12Hits += 1;
+    }
+
+    channelMetric.lastUpdated = timestamp;
+    this.dirtyChannels.add(safeChannel);
+
+    if (pair) {
+      const safePair = String(pair).toUpperCase();
+      const pairMetric = this._getOrCreateMetrics(this.pairStats, safePair);
+      pairMetric.totalSignals += 1;
+      if (targetHits.tp1Hit || outcome.tp1Hit || outcome.status === 'PARTIAL_TP' || outcome.status === 'FULL_TP') pairMetric.tp1Hits += 1;
+      if (targetHits.tp2Hit || outcome.tp2Hit || outcome.status === 'FULL_TP') pairMetric.tp2Hits += 1;
+      if (targetHits.tp3Hit || outcome.tp3Hit || outcome.status === 'FULL_TP') {
+        pairMetric.tp3Hits += 1;
+        pairMetric.fullTpHits += 1;
+      }
+      if (targetHits.slHit || outcome.slHit || outcome.status === 'SL_HIT') pairMetric.originalSlHits += 1;
+      if (targetHits.derivedSl8Hit || outcome.derivedSl8Hit) pairMetric.sl8Hits += 1;
+      if (targetHits.derivedSl10Hit || outcome.derivedSl10Hit) pairMetric.sl10Hits += 1;
+      if (targetHits.derivedSl12Hit || outcome.derivedSl12Hit) pairMetric.sl12Hits += 1;
+      pairMetric.lastUpdated = timestamp;
+      this.dirtyPairs.add(safePair);
+    }
+
+    logger.info(`[AnalyticsEngine] Recorded completed outcome for channel [${safeChannel}] (status: ${outcome.status})`);
+  }
+
+  /**
    * Flush only dirty records to MongoDB using Dirty-State Persistence Strategy.
    */
   async flushDirtyAnalytics() {

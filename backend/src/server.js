@@ -2,6 +2,7 @@ const app = require('./app');
 const envConfig = require('./config/env.config');
 const { connectDatabase, disconnectDatabase } = require('./database/connection');
 const analyticsEngine = require('./services/analyticsEngine.service');
+const outcomeSyncService = require('./services/outcomeSync.service');
 const logger = require('./utils/logger');
 
 let server;
@@ -16,6 +17,9 @@ const startServer = async () => {
   // Hydrate AnalyticsEngine in-memory live state from database
   await analyticsEngine.hydrateFromDatabase();
 
+  // Start background completed outcome synchronization bridge
+  outcomeSyncService.start();
+
   // Start Express HTTP Server
   server = app.listen(envConfig.port, () => {
     logger.info(`Server listening on port ${envConfig.port} [${envConfig.nodeEnv}]`);
@@ -23,9 +27,12 @@ const startServer = async () => {
 };
 
 // Graceful shutdown helper:
-// Order: 1. Stop HTTP -> 2. Flush dirty analytics -> 3. Disconnect DB -> 4. Exit 0
+// Order: 1. Stop HTTP -> 2. Stop Outcome Sync -> 3. Flush dirty analytics -> 4. Disconnect DB -> 5. Exit 0
 const shutdownGracefully = async (signal) => {
   logger.info(`Received ${signal}. Initiating graceful shutdown sequence...`);
+
+  // Stop background outcome sync loop
+  outcomeSyncService.stop();
 
   if (server) {
     // 1. Stop accepting HTTP requests
