@@ -72,7 +72,7 @@ export const useDashboardData = () => {
     fetchData(isInitialLoading);
   }, [debouncedSearch]);
 
-  // 10-Second Automatic Non-Blocking Polling Refresh
+  // 15-Second Automatic Non-Blocking Polling Refresh
   const fetchDataRef = useRef(fetchData);
   useEffect(() => {
     fetchDataRef.current = fetchData;
@@ -81,7 +81,7 @@ export const useDashboardData = () => {
   useEffect(() => {
     const interval = setInterval(() => {
       fetchDataRef.current(false);
-    }, 10000);
+    }, 15000);
 
     return () => clearInterval(interval);
   }, []);
