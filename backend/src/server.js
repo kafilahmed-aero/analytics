@@ -54,6 +54,8 @@ const shutdownGracefully = async (signal) => {
     await disconnectDatabase();
     process.exit(0);
   }
+};
+
 // Listen for termination signals
 process.on('SIGTERM', () => shutdownGracefully('SIGTERM'));
 process.on('SIGINT', () => shutdownGracefully('SIGINT'));
