@@ -20,8 +20,3 @@ export const getDashboardChannels = async (params = {}) => {
   const queryString = buildQueryString(params);
   return await fetchApi(`${API_ENDPOINTS.DASHBOARD_CHANNELS}${queryString}`);
 };
-
-export const getDashboardPairs = async (params = {}) => {
-  const queryString = buildQueryString(params);
-  return await fetchApi(`${API_ENDPOINTS.DASHBOARD_PAIRS}${queryString}`);
-};

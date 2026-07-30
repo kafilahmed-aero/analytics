@@ -5,6 +5,5 @@ const router = express.Router();
 
 router.get('/summary', dashboardController.getDashboardSummary);
 router.get('/channels', dashboardController.getDashboardChannels);
-router.get('/pairs', dashboardController.getDashboardPairs);
 
 module.exports = router;

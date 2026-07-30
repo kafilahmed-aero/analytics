@@ -2,42 +2,25 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   getDashboardSummary,
   getDashboardChannels,
-  getDashboardPairs,
 } from '../services/dashboard.service';
 
 export const useDashboardData = () => {
-  const [activeTab, setActiveTab] = useState('channels'); // 'channels' | 'pairs'
-
-  // Query Params State
+  // Query State (Search channel name)
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [sortBy, setSortBy] = useState('totalSignals');
-  const [sortOrder, setSortOrder] = useState('desc');
-  const [minSignals, setMinSignals] = useState('');
-  const [page, setPage] = useState(1);
-  const [limit, setLimit] = useState(10);
 
   // Data & Status State
   const [summary, setSummary] = useState(null);
-  const [tableItems, setTableItems] = useState([]);
-  const [pagination, setPagination] = useState({
-    page: 1,
-    limit: 10,
-    totalItems: 0,
-    totalPages: 1,
-    hasNext: false,
-    hasPrev: false,
-  });
+  const [channels, setChannels] = useState([]);
 
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState(null);
 
-  // 400ms Debounce Handler for Search Term
+  // 400ms Debounce Handler for Channel Search Term
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedSearch(searchTerm);
-      setPage(1); // Reset to page 1 on new search
     }, 400);
 
     return () => clearTimeout(timer);
@@ -54,31 +37,21 @@ export const useDashboardData = () => {
 
       try {
         const queryParams = {
-          page,
-          limit,
           search: debouncedSearch,
-          sortBy,
-          sortOrder,
-          minSignals,
         };
 
-        // Parallel Fetch: Summary + Active Tab Data
-        const [summaryRes, tableRes] = await Promise.all([
+        // Parallel Fetch: Summary + Channel Analytics
+        const [summaryRes, channelsRes] = await Promise.all([
           getDashboardSummary(),
-          activeTab === 'channels'
-            ? getDashboardChannels(queryParams)
-            : getDashboardPairs(queryParams),
+          getDashboardChannels(queryParams),
         ]);
 
         if (summaryRes.success) {
           setSummary(summaryRes.data);
         }
 
-        if (tableRes.success && tableRes.data) {
-          setTableItems(tableRes.data.items || []);
-          if (tableRes.data.pagination) {
-            setPagination(tableRes.data.pagination);
-          }
+        if (channelsRes.success && channelsRes.data) {
+          setChannels(channelsRes.data.channels || []);
         }
 
         setError(null);
@@ -91,13 +64,13 @@ export const useDashboardData = () => {
         setIsRefreshing(false);
       }
     },
-    [activeTab, page, limit, debouncedSearch, sortBy, sortOrder, minSignals]
+    [debouncedSearch]
   );
 
-  // Fetch when tab or query params change
+  // Fetch when debounced search term changes
   useEffect(() => {
     fetchData(isInitialLoading);
-  }, [activeTab, page, limit, debouncedSearch, sortBy, sortOrder, minSignals]);
+  }, [debouncedSearch]);
 
   // 10-Second Automatic Non-Blocking Polling Refresh
   const fetchDataRef = useRef(fetchData);
@@ -113,31 +86,11 @@ export const useDashboardData = () => {
     return () => clearInterval(interval);
   }, []);
 
-  const handleTabChange = (tab) => {
-    if (tab !== activeTab) {
-      setActiveTab(tab);
-      setPage(1);
-    }
-  };
-
   return {
-    activeTab,
-    setActiveTab: handleTabChange,
     searchTerm,
     setSearchTerm,
-    sortBy,
-    setSortBy,
-    sortOrder,
-    setSortOrder,
-    minSignals,
-    setMinSignals,
-    page,
-    setPage,
-    limit,
-    setLimit,
     summary,
-    tableItems,
-    pagination,
+    channels,
     isInitialLoading,
     isRefreshing,
     error,
