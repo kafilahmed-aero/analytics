@@ -1,3 +1,5 @@
+const BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
+
 export const fetchApi = async (endpoint, options = {}) => {
   const defaultHeaders = {
     'Content-Type': 'application/json',
@@ -11,8 +13,10 @@ export const fetchApi = async (endpoint, options = {}) => {
     },
   };
 
+  const url = endpoint.startsWith('http') ? endpoint : `${BASE_URL}${endpoint}`;
+
   try {
-    const response = await fetch(endpoint, config);
+    const response = await fetch(url, config);
     const data = await response.json();
 
     if (!response.ok) {
@@ -21,7 +25,7 @@ export const fetchApi = async (endpoint, options = {}) => {
 
     return data;
   } catch (error) {
-    console.error(`API Fetch Error [${endpoint}]:`, error.message);
+    console.error(`API Fetch Error [${url}]:`, error.message);
     throw error;
   }
 };
