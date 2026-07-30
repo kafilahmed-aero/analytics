@@ -22,15 +22,21 @@ class AnalyticsEngine {
   }
 
   /**
-   * Hydrate in-memory maps from MongoDB on application startup.
+   * Hydrate in-memory maps and syncState lastCursor from MongoDB on application startup.
    */
   async hydrateFromDatabase() {
-    const { channelMap, pairMap } = await persistenceService.hydrateAnalytics();
+    const outcomeSyncService = require('./outcomeSync.service');
+    const { channelMap, pairMap, lastCursor } = await persistenceService.hydrateAnalytics();
     this.channelStats = channelMap;
     this.pairStats = pairMap;
     this.dirtyChannels.clear();
     this.dirtyPairs.clear();
-    logger.info(`[AnalyticsEngine] Memory live state hydrated (${this.channelStats.size} channels, ${this.pairStats.size} pairs)`);
+
+    if (lastCursor) {
+      outcomeSyncService.setLastCursor(lastCursor);
+    }
+
+    logger.info(`[AnalyticsEngine] Memory live state hydrated (${this.channelStats.size} channels, ${this.pairStats.size} pairs, lastCursor: "${lastCursor}")`);
   }
 
   /**
@@ -212,17 +218,20 @@ class AnalyticsEngine {
   }
 
   /**
-   * Flush only dirty records to MongoDB using Dirty-State Persistence Strategy.
+   * Flush only dirty records to MongoDB using Atomic Dirty-State Persistence Strategy.
    */
   async flushDirtyAnalytics() {
-    if (this.dirtyChannels.size === 0 && this.dirtyPairs.size === 0) {
+    const outcomeSyncService = require('./outcomeSync.service');
+    const currentCursor = outcomeSyncService.getLastCursor();
+
+    if (this.dirtyChannels.size === 0 && this.dirtyPairs.size === 0 && !currentCursor) {
       return { flushedChannels: 0, flushedPairs: 0 };
     }
 
     const dirtyChannelItems = Array.from(this.dirtyChannels).map((key) => this.channelStats.get(key)).filter(Boolean);
     const dirtyPairItems = Array.from(this.dirtyPairs).map((key) => this.pairStats.get(key)).filter(Boolean);
 
-    const result = await persistenceService.flushDirtyRecords(dirtyChannelItems, dirtyPairItems);
+    const result = await persistenceService.flushDirtyRecords(dirtyChannelItems, dirtyPairItems, currentCursor);
 
     // Clear dirty sets after successful flush
     this.dirtyChannels.clear();

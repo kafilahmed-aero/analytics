@@ -16,6 +16,23 @@ class OutcomeSyncService {
   }
 
   /**
+   * Set opaque lastCursor token restored during server startup hydration.
+   */
+  setLastCursor(cursor) {
+    if (typeof cursor === 'string') {
+      this.lastCursor = cursor;
+      logger.info(`[OutcomeSyncService] Restored opaque lastCursor from database: "${this.lastCursor}"`);
+    }
+  }
+
+  /**
+   * Get current opaque lastCursor token.
+   */
+  getLastCursor() {
+    return this.lastCursor;
+  }
+
+  /**
    * Start the background outcome synchronization loop.
    */
   start() {

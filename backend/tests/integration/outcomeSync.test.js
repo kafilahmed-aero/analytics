@@ -59,6 +59,22 @@ const runOutcomeSyncTests = () => {
     results.errors.push(`Outcome sync idempotency test error: ${err.message}`);
   }
 
+  // Test 3: Cursor Token Hydration and Opaque Contract Verification
+  try {
+    const outcomeSyncService = require('../../src/services/outcomeSync.service');
+    outcomeSyncService.setLastCursor('TEST_OPAQUE_CURSOR_123');
+
+    if (outcomeSyncService.getLastCursor() === 'TEST_OPAQUE_CURSOR_123') {
+      results.passed += 1;
+    } else {
+      results.failed += 1;
+      results.errors.push('Cursor token getter/setter mismatch');
+    }
+  } catch (err) {
+    results.failed += 1;
+    results.errors.push(`Cursor hydration error: ${err.message}`);
+  }
+
   return results;
 };
 
