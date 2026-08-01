@@ -30,7 +30,7 @@ export const DashboardSummaryCards = ({ summary, isRefreshing }) => {
     sl12Dollars = 0,
   } = cumulativeHits;
 
-  const formatDollar = (val) => `$${(Number(val) || 0).toFixed(2)}`;
+  const formatVal = (val) => (Number(val) || 0).toFixed(2);
 
   return (
     <div className="health-card" style={{ marginBottom: '1.5rem' }}>
@@ -63,50 +63,35 @@ export const DashboardSummaryCards = ({ summary, isRefreshing }) => {
         <div className="health-item">
           <span className="health-label">TP1 Milestone</span>
           <span className="health-value" style={{ color: '#10b981' }}>
-            Hits: {tp1Hits}
-          </span>
-          <span style={{ fontSize: '0.8125rem', color: '#10b981', fontWeight: 600 }}>
-            {formatDollar(tp1Dollars)}
+            {formatVal(tp1Dollars)}
           </span>
         </div>
 
         <div className="health-item">
           <span className="health-label">TP2 Milestone</span>
           <span className="health-value" style={{ color: '#10b981' }}>
-            Hits: {tp2Hits}
-          </span>
-          <span style={{ fontSize: '0.8125rem', color: '#10b981', fontWeight: 600 }}>
-            {formatDollar(tp2Dollars)}
+            {formatVal(tp2Dollars)}
           </span>
         </div>
 
         <div className="health-item">
           <span className="health-label">Full TP Milestone</span>
           <span className="health-value" style={{ color: '#10b981' }}>
-            Hits: {fullTpHits}
-          </span>
-          <span style={{ fontSize: '0.8125rem', color: '#10b981', fontWeight: 600 }}>
-            {formatDollar(fullTpDollars)}
+            {formatVal(fullTpDollars)}
           </span>
         </div>
 
         <div className="health-item">
           <span className="health-label">Original SL Milestone</span>
           <span className="health-value" style={{ color: '#ef4444' }}>
-            Hits: {originalSlHits}
-          </span>
-          <span style={{ fontSize: '0.8125rem', color: '#ef4444', fontWeight: 600 }}>
-            {formatDollar(originalSlDollars)}
+            {formatVal(originalSlDollars)}
           </span>
         </div>
 
         <div className="health-item">
           <span className="health-label">SL8 / SL10 / SL12 Milestones</span>
-          <span className="health-value" style={{ fontSize: '0.9375rem', color: '#f59e0b' }}>
-            Hits: {sl8Hits} / {sl10Hits} / {sl12Hits}
-          </span>
-          <span style={{ fontSize: '0.75rem', color: '#f59e0b', fontWeight: 600 }}>
-            {formatDollar(sl8Dollars)} / {formatDollar(sl10Dollars)} / {formatDollar(sl12Dollars)}
+          <span className="health-value" style={{ fontSize: '0.9375rem', color: '#ef4444' }}>
+            {formatVal(sl8Dollars)} / {formatVal(sl10Dollars)} / {formatVal(sl12Dollars)}
           </span>
         </div>
       </div>

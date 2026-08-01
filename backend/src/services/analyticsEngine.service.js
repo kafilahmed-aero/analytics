@@ -267,7 +267,14 @@ class AnalyticsEngineService {
       totalOriginalSlDollars: 0.0,
     };
 
+    const TEST_KEYWORDS = ['VERIFY', 'TEST', 'DEMO', 'PROD_VERIFY', 'PROD_ALERTS'];
+
     for (const chanRec of this.channelStats.values()) {
+      const chanName = String(chanRec.channel || '').toUpperCase();
+      if (TEST_KEYWORDS.some((kw) => chanName.includes(kw))) {
+        continue; // Exclude test/verification channels from live summary
+      }
+
       totalSignalsProcessed += chanRec.totalSignalsProcessed;
       totals.totalTp1Hits += chanRec.totalTp1Hits;
       totals.totalTp1Dollars += chanRec.totalTp1Dollars;
@@ -318,11 +325,15 @@ class AnalyticsEngineService {
       sl12Dollars: totals.totalSl12Dollars,
     };
 
+    const liveChannelsCount = Array.from(this.channelStats.keys()).filter(
+      (chan) => !TEST_KEYWORDS.some((kw) => chan.includes(kw))
+    ).length;
+
     return {
       serverStatus: 'online',
       uptime: `${uptimeSec}s`,
-      channelsTracked: this.channelStats.size,
-      pairsTracked: 1, // XAUUSD permanently
+      channelsTracked: liveChannelsCount,
+      pairsTracked: liveChannelsCount > 0 ? 1 : 0,
       totalSignalsProcessed,
       cumulativeHits,
       cumulativeMilestoneTotals: totals,

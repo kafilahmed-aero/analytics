@@ -8,7 +8,7 @@ export const AnalyticsTable = ({
   searchTerm = '',
   onSearchChange,
 }) => {
-  const formatDollar = (val) => `$${(Number(val) || 0).toFixed(2)}`;
+  const formatVal = (val) => (Number(val) || 0).toFixed(2);
 
   // Filter channels based on search term
   const items = channels.filter((row) =>
@@ -133,9 +133,9 @@ export const AnalyticsTable = ({
               <th style={{ padding: '0.875rem 0.75rem', fontWeight: 600, textAlign: 'center', color: '#10b981' }}>TP3</th>
               <th style={{ padding: '0.875rem 0.75rem', fontWeight: 600, textAlign: 'center', color: '#10b981' }}>Full TP</th>
               <th style={{ padding: '0.875rem 0.75rem', fontWeight: 600, textAlign: 'center', color: '#ef4444' }}>Original SL</th>
-              <th style={{ padding: '0.875rem 0.75rem', fontWeight: 600, textAlign: 'center', color: '#f59e0b' }}>SL8</th>
-              <th style={{ padding: '0.875rem 0.75rem', fontWeight: 600, textAlign: 'center', color: '#f59e0b' }}>SL10</th>
-              <th style={{ padding: '0.875rem 0.75rem', fontWeight: 600, textAlign: 'center', color: '#f59e0b' }}>SL12</th>
+              <th style={{ padding: '0.875rem 0.75rem', fontWeight: 600, textAlign: 'center', color: '#ef4444' }}>SL8</th>
+              <th style={{ padding: '0.875rem 0.75rem', fontWeight: 600, textAlign: 'center', color: '#ef4444' }}>SL10</th>
+              <th style={{ padding: '0.875rem 0.75rem', fontWeight: 600, textAlign: 'center', color: '#ef4444' }}>SL12</th>
               <th style={{ padding: '0.875rem 1.25rem', fontWeight: 600, textAlign: 'right' }}>Last Updated</th>
             </tr>
           </thead>
@@ -169,37 +169,29 @@ export const AnalyticsTable = ({
                   <td style={{ padding: '0.875rem 0.75rem', textAlign: 'center', fontWeight: 600 }}>
                     {row.totalSignals}
                   </td>
-                  <td style={{ padding: '0.875rem 0.75rem', textAlign: 'center', color: '#10b981' }}>
-                    <div>{row.tp1Hits} Hits</div>
-                    <div style={{ fontSize: '0.75rem', fontWeight: 600 }}>{formatDollar(row.tp1Dollars)}</div>
-                  </td>
-                  <td style={{ padding: '0.875rem 0.75rem', textAlign: 'center', color: '#10b981' }}>
-                    <div>{row.tp2Hits} Hits</div>
-                    <div style={{ fontSize: '0.75rem', fontWeight: 600 }}>{formatDollar(row.tp2Dollars)}</div>
-                  </td>
-                  <td style={{ padding: '0.875rem 0.75rem', textAlign: 'center', color: '#10b981' }}>
-                    <div>{row.tp3Hits} Hits</div>
-                    <div style={{ fontSize: '0.75rem', fontWeight: 600 }}>{formatDollar(row.tp3Dollars)}</div>
+                  <td style={{ padding: '0.875rem 0.75rem', textAlign: 'center', fontWeight: 600, color: '#10b981' }}>
+                    {formatVal(row.tp1Dollars)}
                   </td>
                   <td style={{ padding: '0.875rem 0.75rem', textAlign: 'center', fontWeight: 600, color: '#10b981' }}>
-                    <div>{row.fullTpHits} Hits</div>
-                    <div style={{ fontSize: '0.75rem', fontWeight: 600 }}>{formatDollar(row.fullTpDollars)}</div>
+                    {formatVal(row.tp2Dollars)}
+                  </td>
+                  <td style={{ padding: '0.875rem 0.75rem', textAlign: 'center', fontWeight: 600, color: '#10b981' }}>
+                    {formatVal(row.tp3Dollars)}
+                  </td>
+                  <td style={{ padding: '0.875rem 0.75rem', textAlign: 'center', fontWeight: 600, color: '#10b981' }}>
+                    {formatVal(row.fullTpDollars)}
                   </td>
                   <td style={{ padding: '0.875rem 0.75rem', textAlign: 'center', fontWeight: 600, color: '#ef4444' }}>
-                    <div>{row.originalSlHits} Hits</div>
-                    <div style={{ fontSize: '0.75rem', fontWeight: 600 }}>{formatDollar(row.originalSlDollars)}</div>
+                    {formatVal(row.originalSlDollars)}
                   </td>
-                  <td style={{ padding: '0.875rem 0.75rem', textAlign: 'center', color: '#f59e0b' }}>
-                    <div>{row.sl8Hits} Hits</div>
-                    <div style={{ fontSize: '0.75rem', fontWeight: 600 }}>{formatDollar(row.sl8Dollars)}</div>
+                  <td style={{ padding: '0.875rem 0.75rem', textAlign: 'center', fontWeight: 600, color: '#ef4444' }}>
+                    {formatVal(row.sl8Dollars)}
                   </td>
-                  <td style={{ padding: '0.875rem 0.75rem', textAlign: 'center', color: '#f59e0b' }}>
-                    <div>{row.sl10Hits} Hits</div>
-                    <div style={{ fontSize: '0.75rem', fontWeight: 600 }}>{formatDollar(row.sl10Dollars)}</div>
+                  <td style={{ padding: '0.875rem 0.75rem', textAlign: 'center', fontWeight: 600, color: '#ef4444' }}>
+                    {formatVal(row.sl10Dollars)}
                   </td>
-                  <td style={{ padding: '0.875rem 0.75rem', textAlign: 'center', color: '#f59e0b' }}>
-                    <div>{row.sl12Hits} Hits</div>
-                    <div style={{ fontSize: '0.75rem', fontWeight: 600 }}>{formatDollar(row.sl12Dollars)}</div>
+                  <td style={{ padding: '0.875rem 0.75rem', textAlign: 'center', fontWeight: 600, color: '#ef4444' }}>
+                    {formatVal(row.sl12Dollars)}
                   </td>
                   <td style={{ padding: '0.875rem 1.25rem', textAlign: 'right', fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>
                     {row.lastUpdated ? new Date(row.lastUpdated).toLocaleTimeString() : 'N/A'}
