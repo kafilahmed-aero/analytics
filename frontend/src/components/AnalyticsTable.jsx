@@ -1,31 +1,40 @@
-import React from 'react';
-import { AlertCircle, Inbox, Search, Trophy } from 'lucide-react';
+import React, { useState } from 'react';
+import { Trophy, Search, AlertCircle, Inbox } from 'lucide-react';
 
 export const AnalyticsTable = ({
-  items = [],
+  channels = [],
+  isLoading = false,
+  error = null,
   searchTerm = '',
   onSearchChange,
-  isInitialLoading = false,
-  error = null,
 }) => {
-  if (isInitialLoading) {
-    return (
-      <div className="health-card">
-        <div className="loading-state">Loading channel performance rankings...</div>
-      </div>
-    );
-  }
+  const formatDollar = (val) => `$${(Number(val) || 0).toFixed(2)}`;
+
+  // Filter channels based on search term
+  const items = channels.filter((row) =>
+    String(row.identifier || row.channel || '')
+      .toLowerCase()
+      .includes(String(searchTerm).toLowerCase())
+  );
 
   return (
-    <div className="health-card" style={{ padding: 0, overflow: 'hidden' }}>
-      {/* Table Card Header with Search */}
+    <div
+      className="health-card"
+      style={{
+        padding: 0,
+        overflow: 'hidden',
+        display: 'flex',
+        flexDirection: 'column',
+      }}
+    >
+      {/* Table Header Controls */}
       <div
         style={{
-          padding: '1rem 1.25rem',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
+          padding: '1.25rem 1.5rem',
           borderBottom: '1px solid var(--border-color)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
           flexWrap: 'wrap',
           gap: '1rem',
         }}
@@ -92,7 +101,7 @@ export const AnalyticsTable = ({
         </div>
       )}
 
-      {/* Single Scrollable Table (Vertical & Horizontal) */}
+      {/* Single Scrollable Table */}
       <div style={{ overflowX: 'auto', maxHeight: '600px', width: '100%' }}>
         <table
           style={{
@@ -161,28 +170,36 @@ export const AnalyticsTable = ({
                     {row.totalSignals}
                   </td>
                   <td style={{ padding: '0.875rem 0.75rem', textAlign: 'center', color: '#10b981' }}>
-                    {row.tp1Hits}
+                    <div>{row.tp1Hits} Hits</div>
+                    <div style={{ fontSize: '0.75rem', fontWeight: 600 }}>{formatDollar(row.tp1Dollars)}</div>
                   </td>
                   <td style={{ padding: '0.875rem 0.75rem', textAlign: 'center', color: '#10b981' }}>
-                    {row.tp2Hits}
+                    <div>{row.tp2Hits} Hits</div>
+                    <div style={{ fontSize: '0.75rem', fontWeight: 600 }}>{formatDollar(row.tp2Dollars)}</div>
                   </td>
                   <td style={{ padding: '0.875rem 0.75rem', textAlign: 'center', color: '#10b981' }}>
-                    {row.tp3Hits}
+                    <div>{row.tp3Hits} Hits</div>
+                    <div style={{ fontSize: '0.75rem', fontWeight: 600 }}>{formatDollar(row.tp3Dollars)}</div>
                   </td>
                   <td style={{ padding: '0.875rem 0.75rem', textAlign: 'center', fontWeight: 600, color: '#10b981' }}>
-                    {row.fullTpHits}
+                    <div>{row.fullTpHits} Hits</div>
+                    <div style={{ fontSize: '0.75rem', fontWeight: 600 }}>{formatDollar(row.fullTpDollars)}</div>
                   </td>
                   <td style={{ padding: '0.875rem 0.75rem', textAlign: 'center', fontWeight: 600, color: '#ef4444' }}>
-                    {row.originalSlHits}
+                    <div>{row.originalSlHits} Hits</div>
+                    <div style={{ fontSize: '0.75rem', fontWeight: 600 }}>{formatDollar(row.originalSlDollars)}</div>
                   </td>
                   <td style={{ padding: '0.875rem 0.75rem', textAlign: 'center', color: '#f59e0b' }}>
-                    {row.sl8Hits}
+                    <div>{row.sl8Hits} Hits</div>
+                    <div style={{ fontSize: '0.75rem', fontWeight: 600 }}>{formatDollar(row.sl8Dollars)}</div>
                   </td>
                   <td style={{ padding: '0.875rem 0.75rem', textAlign: 'center', color: '#f59e0b' }}>
-                    {row.sl10Hits}
+                    <div>{row.sl10Hits} Hits</div>
+                    <div style={{ fontSize: '0.75rem', fontWeight: 600 }}>{formatDollar(row.sl10Dollars)}</div>
                   </td>
                   <td style={{ padding: '0.875rem 0.75rem', textAlign: 'center', color: '#f59e0b' }}>
-                    {row.sl12Hits}
+                    <div>{row.sl12Hits} Hits</div>
+                    <div style={{ fontSize: '0.75rem', fontWeight: 600 }}>{formatDollar(row.sl12Dollars)}</div>
                   </td>
                   <td style={{ padding: '0.875rem 1.25rem', textAlign: 'right', fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>
                     {row.lastUpdated ? new Date(row.lastUpdated).toLocaleTimeString() : 'N/A'}
