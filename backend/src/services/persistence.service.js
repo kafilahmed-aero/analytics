@@ -32,13 +32,16 @@ class PersistenceService {
 
     try {
       if (channelRecords.length > 0) {
-        const channelOps = channelRecords.map((rec) => ({
-          updateOne: {
-            filter: { channel: rec.channel },
-            update: { $set: rec },
-            upsert: true,
-          },
-        }));
+        const channelOps = channelRecords.map((rec) => {
+          rec.identifier = rec.identifier || rec.channel;
+          return {
+            updateOne: {
+              filter: { channel: rec.channel },
+              update: { $set: rec },
+              upsert: true,
+            },
+          };
+        });
 
         const chanResult = await ChannelAnalytics.bulkWrite(channelOps);
         flushedChannels = chanResult.upsertedCount + chanResult.modifiedCount;

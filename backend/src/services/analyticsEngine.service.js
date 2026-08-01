@@ -17,6 +17,7 @@ class AnalyticsEngineService {
   createBlankChannelRecord(channelName) {
     return {
       channel: channelName,
+      identifier: channelName,
       totalSignalsProcessed: 0,
       totalTp1Hits: 0,
       totalTp1Dollars: 0.0,
@@ -98,6 +99,7 @@ class AnalyticsEngineService {
 
         this.channelStats.set(channelName, {
           channel: channelName,
+          identifier: channelName,
           totalSignalsProcessed: rec.totalSignalsProcessed || 0,
           totalTp1Hits: rec.totalTp1Hits || 0,
           totalTp1Dollars: rec.totalTp1Dollars || 0.0,
