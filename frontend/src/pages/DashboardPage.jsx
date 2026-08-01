@@ -37,10 +37,10 @@ export const DashboardPage = () => {
 
       {/* 5. Channel Analytics Table (Displays all channels, ranked by Total Signals DESC) */}
       <AnalyticsTable
-        items={channels}
+        channels={channels}
         searchTerm={searchTerm}
         onSearchChange={setSearchTerm}
-        isInitialLoading={isInitialLoading}
+        isLoading={isInitialLoading}
         error={error}
       />
     </div>
