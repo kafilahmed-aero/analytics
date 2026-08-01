@@ -18,8 +18,8 @@ const getDashboardSummary = asyncHandler(async (req, res) => {
 });
 
 const getDashboardChannels = asyncHandler(async (req, res) => {
-  const rawChannels = analyticsEngine.getChannelAnalytics();
-  const processed = processChannelQuery(rawChannels, req.query);
+  const rawAnalytics = analyticsEngine.getChannelAnalytics(req.query);
+  const processed = processChannelQuery(rawAnalytics.channels || [], req.query);
 
   return res
     .status(HTTP_STATUS.OK)

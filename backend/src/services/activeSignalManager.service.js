@@ -1,132 +1,464 @@
 const logger = require('../utils/logger');
-const { calculateDerivedStopLosses } = require('../utils/pipCalculator');
+const analyticsEvents = require('../events/analyticsEvents');
+const { calculateDerivedStopLosses, calculatePipDistance } = require('../utils/pipCalculator');
 
-class ActiveSignalManager {
+// Analytics V2 is permanently XAUUSD-only
+const SUPPORTED_PAIR = 'XAUUSD';
+
+// Allowed FSM State Transition Matrix
+const ALLOWED_FSM_TRANSITIONS = {
+  CREATED: new Set(['VALIDATED']),
+  VALIDATED: new Set(['REGISTERED']),
+  REGISTERED: new Set(['HYDRATED', 'WAITING_PRICE']),
+  HYDRATED: new Set(['WAITING_PRICE']),
+  WAITING_PRICE: new Set(['MONITORING']),
+  MONITORING: new Set(['COMPLETED_FULL_TP', 'COMPLETED_ORIGINAL_SL', 'CANCELLED', 'EXPIRED']),
+  COMPLETED_FULL_TP: new Set(['EVICTED']),
+  COMPLETED_ORIGINAL_SL: new Set(['EVICTED']),
+  CANCELLED: new Set(['EVICTED']),
+  EXPIRED: new Set(['EVICTED']),
+  EVICTED: new Set([]),
+};
+
+class SessionRegistry {
   constructor() {
-    // Watermark: Ignore any signals created prior to application startup
     this.bootTimestamp = Date.now();
-    
-    // Primary in-memory store for currently active signals: Map<signalId, ActiveSignal>
-    this.activeSignals = new Map();
-    
-    // Processed registry set for O(1) deduplication check across all received signals
-    this.processedSignalIds = new Set();
 
-    logger.info(`[ActiveSignalManager] Initialized with boot watermark: ${new Date(this.bootTimestamp).toISOString()}`);
+    // Primary In-Memory Store: Map<sessionId, MonitoringSession>
+    this.sessions = new Map();
+
+    // Fast O(1) Lookup Index Maps
+    this.signalIdIndex = new Map();   // Map<signalId, sessionId>
+    this.messageKeyIndex = new Map();  // Map<messageKey, sessionId>
+    this.pairIndex = new Map();        // Map<pair, Set<sessionId>> (XAUUSD only)
+    this.channelIndex = new Map();     // Map<channel, Set<sessionId>>
+
+    this.processedKeys = new Set();
+    this.hydrationComplete = false;
+
+    logger.info(`[SessionRegistry] Initialized XAUUSD-Only Registry with boot watermark: ${new Date(this.bootTimestamp).toISOString()}`);
   }
 
-  /**
-   * Process a raw signal payload from FX Desk Pro.
-   * Checks watermark filtering, deduplication, and calculates derived SL values.
-   */
+  generateSessionId(signalId) {
+    return `SESS_${signalId}`;
+  }
+
+  canTransition(currentStatus, targetStatus) {
+    const allowedTargets = ALLOWED_FSM_TRANSITIONS[currentStatus];
+    return allowedTargets ? allowedTargets.has(targetStatus) : false;
+  }
+
+  buildTpQueue(rawTps = []) {
+    const validTps = rawTps.map((tp) => parseFloat(tp)).filter((tp) => !isNaN(tp) && tp > 0);
+    if (validTps.length === 0) return [];
+
+    let selectedTps = [];
+    if (validTps.length >= 5) {
+      // 5 TP rule: TP1, TP2, TP3, TP5 = Full TP (TP4 is NEVER monitored)
+      selectedTps = [
+        { level: 1, price: validTps[0], isFullTp: false },
+        { level: 2, price: validTps[1], isFullTp: false },
+        { level: 3, price: validTps[2], isFullTp: false },
+        { level: 5, price: validTps[4], isFullTp: true },
+      ];
+    } else {
+      const capped = validTps.slice(0, 4);
+      const lastIdx = capped.length - 1;
+      selectedTps = capped.map((price, idx) => ({
+        level: idx + 1,
+        price,
+        isFullTp: idx === lastIdx,
+      }));
+    }
+
+    return selectedTps;
+  }
+
+  buildAdaptiveSlQueue(direction, entryPrice, originalSl) {
+    const entry = parseFloat(entryPrice);
+    const origSl = parseFloat(originalSl);
+
+    if (isNaN(entry) || isNaN(origSl) || entry <= 0 || origSl <= 0) {
+      return [];
+    }
+
+    const origSlPipDistance = calculatePipDistance(entry, origSl);
+    const { derivedSl8, derivedSl10, derivedSl12 } = calculateDerivedStopLosses(direction, entry);
+
+    const queue = [];
+
+    if (origSlPipDistance >= 8 && derivedSl8 > 0) {
+      queue.push({ name: 'SL8', price: derivedSl8, pipDistance: 8, isTerminal: false });
+    }
+    if (origSlPipDistance >= 10 && derivedSl10 > 0) {
+      queue.push({ name: 'SL10', price: derivedSl10, pipDistance: 10, isTerminal: false });
+    }
+    if (origSlPipDistance >= 12 && derivedSl12 > 0) {
+      queue.push({ name: 'SL12', price: derivedSl12, pipDistance: 12, isTerminal: false });
+    }
+
+    queue.push({
+      name: 'ORIGINAL_SL',
+      price: origSl,
+      pipDistance: Math.round(origSlPipDistance),
+      isTerminal: true,
+    });
+
+    return queue;
+  }
+
   processRawSignal(rawSignal) {
     if (!rawSignal || !rawSignal.id) {
-      return { success: false, reason: 'invalid_signal_payload' };
+      logger.warn('[SessionRegistry] Validation Stage 1 Failed: Malformed payload (missing id)');
+      return { success: false, reason: 'malformed_payload' };
     }
 
     const signalId = String(rawSignal.id);
-    const signalCreatedAtMs = new Date(rawSignal.createdAt || Date.now()).getTime();
-
-    // 1. Watermark Check: Ignore historical signals created before server start
-    if (signalCreatedAtMs < this.bootTimestamp) {
-      logger.debug(`[ActiveSignalManager] Ignored historical signal ${signalId} (created ${new Date(signalCreatedAtMs).toISOString()})`);
-      return { success: false, reason: 'historical_signal_ignored', signalId };
-    }
-
-    // 2. Deduplication Check: Prevent processing identical signal twice
-    if (this.processedSignalIds.has(signalId)) {
-      logger.debug(`[ActiveSignalManager] Ignored duplicate signal ${signalId}`);
-      return { success: false, reason: 'duplicate_signal_ignored', signalId };
-    }
-
-    // 3. Compute Derived Stop Loss levels
     const pair = String(rawSignal.pair || rawSignal.symbol || '').toUpperCase();
-    const direction = String(rawSignal.direction || rawSignal.type || '').toUpperCase();
+    const direction = String(rawSignal.direction || rawSignal.type || rawSignal.action || '').toUpperCase();
     const entryPrice = parseFloat(rawSignal.entryPrice || rawSignal.entry);
     const originalSl = parseFloat(rawSignal.originalSl || rawSignal.sl);
 
-    const { derivedSl8, derivedSl10, derivedSl12 } = calculateDerivedStopLosses(
-      pair,
-      direction,
-      entryPrice
-    );
+    if (!pair || !direction || isNaN(entryPrice) || isNaN(originalSl)) {
+      logger.warn(`[SessionRegistry] Validation Stage 1 Failed: Missing required trading fields on signal ${signalId}`);
+      return { success: false, reason: 'malformed_payload', signalId };
+    }
 
-    const tp1 = parseFloat(rawSignal.tp1 || 0);
-    const tp2 = parseFloat(rawSignal.tp2 || 0);
-    const tp3 = parseFloat(rawSignal.tp3 || 0);
-    const fullTp = parseFloat(rawSignal.fullTp || tp3 || tp2 || tp1);
+    if (pair !== SUPPORTED_PAIR) {
+      logger.warn(`[SessionRegistry] Validation Stage 2 Failed: Non-XAUUSD pair [${pair}] rejected on signal ${signalId}`);
+      return { success: false, reason: 'unsupported_pair_non_xauusd', signalId };
+    }
 
-    // 4. Construct lightweight ActiveSignal state object
-    const activeSignal = {
+    const sessionId = this.generateSessionId(signalId);
+    const channel = String(rawSignal.channel || 'UNKNOWN').toUpperCase();
+    const messageId = rawSignal.messageId || signalId;
+    const messageKey = `${channel}:${messageId}`;
+
+    if (this.signalIdIndex.has(signalId) || this.messageKeyIndex.has(messageKey) || this.processedKeys.has(sessionId)) {
+      logger.debug(`[SessionRegistry] Validation Stage 3 Ignored: Duplicate signal ${signalId}`);
+      return { success: false, reason: 'duplicate_signal_ignored', signalId };
+    }
+
+    const signalCreatedAtMs = new Date(rawSignal.createdAt || Date.now()).getTime();
+    if (signalCreatedAtMs < this.bootTimestamp && !rawSignal.bypassWatermark) {
+      logger.debug(`[SessionRegistry] Validation Stage 4 Ignored: Historical signal ${signalId}`);
+      return { success: false, reason: 'historical_signal_ignored', signalId };
+    }
+
+    const rawTps = [];
+    if (rawSignal.tp1) rawTps.push(rawSignal.tp1);
+    if (rawSignal.tp2) rawTps.push(rawSignal.tp2);
+    if (rawSignal.tp3) rawTps.push(rawSignal.tp3);
+    if (rawSignal.tp4) rawTps.push(rawSignal.tp4);
+    if (rawSignal.tp5) rawTps.push(rawSignal.tp5);
+    if (rawTps.length === 0 && rawSignal.target) rawTps.push(rawSignal.target);
+
+    const tpQueue = this.buildTpQueue(rawTps);
+    const slQueue = this.buildAdaptiveSlQueue(direction, entryPrice, originalSl);
+
+    if (tpQueue.length === 0 || slQueue.length === 0) {
+      logger.warn(`[SessionRegistry] Validation Stage 5 Failed: Could not construct valid TP/SL queues for signal ${signalId}`);
+      return { success: false, reason: 'invalid_tp_sl_queue', signalId };
+    }
+
+    const fixedLotSize = parseFloat(rawSignal.fixedLotSize || rawSignal.lotSize || 0.01);
+
+    const session = {
+      sessionId,
       signalId,
-      channel: String(rawSignal.channel || 'UNKNOWN').toUpperCase(),
-      pair,
+      messageKey,
+      pair: SUPPORTED_PAIR,
+      channel,
       direction,
       entryPrice,
-      tp1,
-      tp2,
-      tp3,
-      fullTp,
-      originalSl,
-      derivedSl8,
-      derivedSl10,
-      derivedSl12,
-      hitFlags: {
-        tp1Hit: false,
-        tp2Hit: false,
-        tp3Hit: false,
-        slHit: false,
-        derivedSl8Hit: false,
-        derivedSl10Hit: false,
-        derivedSl12Hit: false,
+      fixedLotSize: isNaN(fixedLotSize) || fixedLotSize <= 0 ? 0.01 : fixedLotSize,
+
+      originalTpList: rawTps.map((t) => parseFloat(t)),
+      tpQueue,
+      activeTpPointer: 0,
+
+      slQueue,
+      activeSlPointer: 0,
+
+      status: 'REGISTERED',
+
+      // Recorded Flags to prevent duplicate milestone recording
+      recordedFlags: {
+        tp1Recorded: false,
+        tp2Recorded: false,
+        tp3Recorded: false,
+        fullTpRecorded: false,
+        sl8Recorded: false,
+        sl10Recorded: false,
+        sl12Recorded: false,
+        originalSlRecorded: false,
       },
+
+      // Independent Milestone Dollar Values
+      milestoneDollars: {
+        tp1Dollar: 0.0,
+        tp2Dollar: 0.0,
+        tp3Dollar: 0.0,
+        fullTpDollar: 0.0,
+        sl8Dollar: 0.0,
+        sl10Dollar: 0.0,
+        sl12Dollar: 0.0,
+        originalSlDollar: 0.0,
+      },
+
+      milestoneHistory: [],
       createdAt: new Date(signalCreatedAtMs).toISOString(),
       receivedAt: new Date().toISOString(),
-      status: 'ACTIVE',
+      lastUpdated: new Date().toISOString(),
+      lastTickPrice: null,
+
+      isDirty: true,
+      isHydrated: false,
     };
 
-    // 5. Save to active signal Map & mark as processed
-    this.activeSignals.set(signalId, activeSignal);
-    this.processedSignalIds.add(signalId);
+    this.sessions.set(sessionId, session);
+    this.signalIdIndex.set(signalId, sessionId);
+    this.messageKeyIndex.set(messageKey, sessionId);
 
-    logger.info(`[ActiveSignalManager] Successfully registered active signal ${signalId} (${pair} ${direction} @ ${entryPrice})`);
+    if (!this.pairIndex.has(SUPPORTED_PAIR)) this.pairIndex.set(SUPPORTED_PAIR, new Set());
+    this.pairIndex.get(SUPPORTED_PAIR).add(sessionId);
 
-    return { success: true, signal: activeSignal };
+    if (!this.channelIndex.has(channel)) this.channelIndex.set(channel, new Set());
+    this.channelIndex.get(channel).add(sessionId);
+
+    this.processedKeys.add(sessionId);
+
+    session.status = 'WAITING_PRICE';
+
+    logger.info(`[SessionRegistry] Instantiated XAUUSD MonitoringSession ${sessionId} (${direction} @ ${entryPrice}, LotSize: ${session.fixedLotSize})`);
+
+    analyticsEvents.emit('SESSION_CREATED', {
+      sessionId,
+      signalId,
+      channel,
+      pair: SUPPORTED_PAIR,
+      direction,
+      entryPrice,
+    });
+
+    this.checkMemoryThresholds();
+
+    return { success: true, session };
   }
 
-  /**
-   * Get list of all currently active signals.
-   */
-  getActiveSignals() {
-    return Array.from(this.activeSignals.values());
-  }
-
-  /**
-   * Retrieve a specific active signal by ID.
-   */
-  getSignalById(signalId) {
-    return this.activeSignals.get(String(signalId)) || null;
-  }
-
-  /**
-   * Remove an active signal from memory (design preparation for completion).
-   */
-  removeActiveSignal(signalId) {
-    const id = String(signalId);
-    const exists = this.activeSignals.has(id);
-    if (exists) {
-      this.activeSignals.delete(id);
-      logger.info(`[ActiveSignalManager] Removed active signal ${id} from memory`);
+  handleSignalUpdate(updatePayload) {
+    if (!updatePayload || !updatePayload.signalId) {
+      return { success: false, reason: 'invalid_update_payload' };
     }
-    return exists;
+
+    const signalId = String(updatePayload.signalId);
+    const sessionId = this.signalIdIndex.get(signalId);
+
+    if (!sessionId || !this.sessions.has(sessionId)) {
+      return { success: false, reason: 'session_not_found', signalId };
+    }
+
+    const session = this.sessions.get(sessionId);
+
+    if (updatePayload.isCancelled || updatePayload.status === 'CANCELLED') {
+      if (this.canTransition(session.status, 'CANCELLED')) {
+        session.status = 'CANCELLED';
+        session.isDirty = true;
+        session.lastUpdated = new Date().toISOString();
+
+        analyticsEvents.emit('SESSION_CANCELLED', {
+          sessionId,
+          signalId,
+          channel: session.channel,
+          cancelledAt: session.lastUpdated,
+        });
+
+        logger.info(`[SessionRegistry] Session ${sessionId} marked CANCELLED upstream`);
+        return { success: true, action: 'cancelled', session };
+      }
+    }
+
+    if (updatePayload.direction && updatePayload.direction.toUpperCase() !== session.direction) {
+      logger.warn(`[SessionRegistry] Direction change attempt forbidden on session ${sessionId}. Marking CANCELLED.`);
+      session.status = 'CANCELLED';
+      session.isDirty = true;
+      session.lastUpdated = new Date().toISOString();
+      return { success: false, reason: 'direction_change_forbidden', session };
+    }
+
+    if (updatePayload.entryPrice && parseFloat(updatePayload.entryPrice) !== session.entryPrice) {
+      session.entryPrice = parseFloat(updatePayload.entryPrice);
+      session.isDirty = true;
+      logger.info(`[SessionRegistry] Updated entry price for session ${sessionId} to ${session.entryPrice}`);
+    }
+
+    if (updatePayload.tps && Array.isArray(updatePayload.tps)) {
+      const newTpQueue = this.buildTpQueue(updatePayload.tps);
+      if (newTpQueue.length > 0) {
+        const hitTps = session.tpQueue.slice(0, session.activeTpPointer);
+        const futureTps = newTpQueue.slice(session.activeTpPointer);
+        session.tpQueue = [...hitTps, ...futureTps];
+
+        if (session.tpQueue.length > 0) {
+          session.tpQueue.forEach((item, idx) => {
+            item.isFullTp = idx === session.tpQueue.length - 1;
+          });
+        }
+        session.isDirty = true;
+        logger.info(`[SessionRegistry] Rebuilt TP queue for session ${sessionId}`);
+      }
+    }
+
+    if (updatePayload.originalSl && parseFloat(updatePayload.originalSl) !== session.slQueue[session.slQueue.length - 1]?.price) {
+      const newSlQueue = this.buildAdaptiveSlQueue(session.direction, session.entryPrice, updatePayload.originalSl);
+      if (newSlQueue.length > 0) {
+        session.slQueue = newSlQueue;
+        if (session.activeSlPointer >= session.slQueue.length) {
+          session.activeSlPointer = session.slQueue.length - 1;
+        }
+        session.isDirty = true;
+        logger.info(`[SessionRegistry] Rebuilt Adaptive SL queue for session ${sessionId}`);
+      }
+    }
+
+    session.lastUpdated = new Date().toISOString();
+
+    analyticsEvents.emit('SESSION_UPDATED', {
+      sessionId,
+      signalId,
+      updateType: updatePayload.updateType || 'general',
+      updatedFields: updatePayload,
+    });
+
+    return { success: true, session };
   }
 
-  /**
-   * Get count of active signals currently in memory.
-   */
-  getActiveCount() {
-    return this.activeSignals.size;
+  registerHydratedSession(sessionData) {
+    if (!sessionData || !sessionData.sessionId) return;
+    const { sessionId, signalId, messageKey, channel } = sessionData;
+
+    sessionData.pair = SUPPORTED_PAIR;
+    sessionData.isHydrated = true;
+    sessionData.isDirty = false;
+    sessionData.status = 'HYDRATED';
+
+    if (!sessionData.recordedFlags) {
+      sessionData.recordedFlags = {
+        tp1Recorded: false,
+        tp2Recorded: false,
+        tp3Recorded: false,
+        fullTpRecorded: false,
+        sl8Recorded: false,
+        sl10Recorded: false,
+        sl12Recorded: false,
+        originalSlRecorded: false,
+      };
+    }
+
+    if (!sessionData.milestoneDollars) {
+      sessionData.recordedFlags = {
+        tp1Dollar: 0,
+        tp2Dollar: 0,
+        tp3Dollar: 0,
+        fullTpDollar: 0,
+        sl8Dollar: 0,
+        sl10Dollar: 0,
+        sl12Dollar: 0,
+        originalSlDollar: 0,
+      };
+    }
+
+    this.sessions.set(sessionId, sessionData);
+    this.signalIdIndex.set(signalId, sessionId);
+    this.messageKeyIndex.set(messageKey, sessionId);
+
+    if (!this.pairIndex.has(SUPPORTED_PAIR)) this.pairIndex.set(SUPPORTED_PAIR, new Set());
+    this.pairIndex.get(SUPPORTED_PAIR).add(sessionId);
+
+    if (!this.channelIndex.has(channel)) this.channelIndex.set(channel, new Set());
+    this.channelIndex.get(channel).add(sessionId);
+
+    this.processedKeys.add(sessionId);
+
+    sessionData.status = 'WAITING_PRICE';
+  }
+
+  getSessionById(sessionId) {
+    return this.sessions.get(sessionId) || null;
+  }
+
+  getSessionBySignalId(signalId) {
+    const sessionId = this.signalIdIndex.get(String(signalId));
+    return sessionId ? this.sessions.get(sessionId) || null : null;
+  }
+
+  getXauusdSessions() {
+    const set = this.pairIndex.get(SUPPORTED_PAIR);
+    if (!set) return [];
+    return Array.from(set).map((id) => this.sessions.get(id)).filter(Boolean);
+  }
+
+  getSessionsByChannel(channel) {
+    const safeChannel = String(channel).toUpperCase();
+    const set = this.channelIndex.get(safeChannel);
+    if (!set) return [];
+    return Array.from(set).map((id) => this.sessions.get(id)).filter(Boolean);
+  }
+
+  getAllActiveSessions() {
+    return Array.from(this.sessions.values());
+  }
+
+  evictSession(sessionId) {
+    const session = this.sessions.get(sessionId);
+    if (!session) return false;
+
+    session.status = 'EVICTED';
+    const { signalId, messageKey, channel } = session;
+
+    this.sessions.delete(sessionId);
+    this.signalIdIndex.delete(signalId);
+    this.messageKeyIndex.delete(messageKey);
+
+    if (this.pairIndex.has(SUPPORTED_PAIR)) {
+      this.pairIndex.get(SUPPORTED_PAIR).delete(sessionId);
+    }
+
+    if (this.channelIndex.has(channel)) {
+      this.channelIndex.get(channel).delete(sessionId);
+      if (this.channelIndex.get(channel).size === 0) this.channelIndex.delete(channel);
+    }
+
+    logger.info(`[SessionRegistry] Evicted XAUUSD session ${sessionId} from active memory`);
+
+    analyticsEvents.emit('SESSION_EVICTED', { sessionId, evictedAt: new Date().toISOString() });
+    return true;
+  }
+
+  checkMemoryThresholds() {
+    const activeCount = this.sessions.size;
+
+    if (activeCount > 2000) {
+      logger.error(`[SessionRegistry] ALARM CRITICAL: Active XAUUSD sessions (${activeCount}) > 2000 limit. Triggering emergency eviction!`);
+      this.evictTerminalSessions();
+    } else if (activeCount > 1500) {
+      logger.warn(`[SessionRegistry] ALARM WARNING: Active XAUUSD sessions (${activeCount}) exceeded 1500 threshold.`);
+    }
+  }
+
+  evictTerminalSessions() {
+    let evictedCount = 0;
+    const terminalStatuses = new Set(['COMPLETED_FULL_TP', 'COMPLETED_ORIGINAL_SL', 'CANCELLED', 'EXPIRED', 'EVICTED']);
+
+    for (const [sessionId, session] of this.sessions.entries()) {
+      if (terminalStatuses.has(session.status) && !session.isDirty) {
+        this.evictSession(sessionId);
+        evictedCount++;
+      }
+    }
+
+    logger.info(`[SessionRegistry] Emergency LRU Eviction freed ${evictedCount} terminal XAUUSD sessions from memory`);
   }
 }
 
-module.exports = new ActiveSignalManager();
+module.exports = new SessionRegistry();

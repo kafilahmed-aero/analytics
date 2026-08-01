@@ -1,152 +1,247 @@
-const activeSignalManager = require('./activeSignalManager.service');
-const analyticsEvents = require('../events/analyticsEvents');
 const logger = require('../utils/logger');
+const sessionRegistry = require('./activeSignalManager.service');
+const dollarLedgerService = require('./dollarLedger.service');
+const analyticsEngine = require('./analyticsEngine.service');
+const analyticsEvents = require('../events/analyticsEvents');
+const tickDispatcher = require('./tickDispatcher.service');
 
-class MonitoringEngine {
-  /**
-   * Flat Memory Architecture:
-   * MonitoringEngine holds NO internal state, arrays, or maps of signals.
-   * It relies exclusively on ActiveSignalManager as the single source of truth.
-   */
+class MilestoneMonitoringEngine {
+  constructor() {
+    tickDispatcher.setMonitoringEngine(this);
+  }
 
   /**
-   * Process a single market price tick for a symbol in one evaluation pass.
-   * Short-circuits finished thresholds, updates signal hit flags in-place, and emits analytics events.
+   * Evaluate a normalized live price tick against active XAUUSD sessions.
+   * Single Active TP Pointer & Single Active SL Pointer Parallel Evaluation.
+   * Milestone Recording is Immutable and Implements Deduplication Flags.
    */
-  processPriceTick(symbol, currentPrice) {
-    const price = parseFloat(currentPrice);
-    if (!symbol || isNaN(price)) {
-      return { evaluatedCount: 0, updatedHitsCount: 0, completedCount: 0 };
+  evaluatePriceTick(priceTick) {
+    if (!priceTick || isNaN(priceTick.price) || priceTick.price <= 0) {
+      return { evaluatedCount: 0, tpCount: 0, slCount: 0, completedCount: 0 };
     }
 
-    const pair = String(symbol).toUpperCase();
-    const activeSignals = activeSignalManager.getActiveSignals();
-    
-    // Filter active signals for the target pair
-    const pairSignals = activeSignals.filter((sig) => sig.pair === pair && sig.status === 'ACTIVE');
+    const price = parseFloat(priceTick.price);
+    const timestamp = priceTick.timestamp || new Date().toISOString();
+    const activeSessions = sessionRegistry.getXauusdSessions();
 
-    if (pairSignals.length === 0) {
-      return { evaluatedCount: 0, updatedHitsCount: 0, completedCount: 0 };
+    if (activeSessions.length === 0) {
+      return { evaluatedCount: 0, tpCount: 0, slCount: 0, completedCount: 0 };
     }
 
-    let updatedHitsCount = 0;
+    let evaluatedCount = 0;
+    let tpCount = 0;
+    let slCount = 0;
     let completedCount = 0;
 
-    // Single pass loop over matching pair signals
-    for (const signal of pairSignals) {
-      const { signalId, channel, direction, tp1, tp2, tp3, originalSl, derivedSl8, derivedSl10, derivedSl12, hitFlags } = signal;
-      const isBuy = direction === 'BUY';
-      let hitsChangedThisTick = false;
+    for (const session of activeSessions) {
+      if (session.status !== 'WAITING_PRICE' && session.status !== 'MONITORING') {
+        continue;
+      }
 
-      if (isBuy) {
-        // --- BUY EVALUATION ---
-        if (!hitFlags.tp1Hit && tp1 > 0 && price >= tp1) {
-          hitFlags.tp1Hit = true;
-          hitsChangedThisTick = true;
-          analyticsEvents.emit('hit_updated', { signalId, channel, pair, hitType: 'tp1Hit' });
-        }
-        if (!hitFlags.tp2Hit && tp2 > 0 && price >= tp2) {
-          hitFlags.tp2Hit = true;
-          hitsChangedThisTick = true;
-          analyticsEvents.emit('hit_updated', { signalId, channel, pair, hitType: 'tp2Hit' });
-        }
-        if (!hitFlags.tp3Hit && tp3 > 0 && price >= tp3) {
-          hitFlags.tp3Hit = true;
-          hitsChangedThisTick = true;
-          analyticsEvents.emit('hit_updated', { signalId, channel, pair, hitType: 'tp3Hit' });
-        }
-        if (!hitFlags.slHit && originalSl > 0 && price <= originalSl) {
-          hitFlags.slHit = true;
-          hitsChangedThisTick = true;
-          analyticsEvents.emit('hit_updated', { signalId, channel, pair, hitType: 'slHit' });
-        }
-        if (!hitFlags.derivedSl8Hit && derivedSl8 > 0 && price <= derivedSl8) {
-          hitFlags.derivedSl8Hit = true;
-          hitsChangedThisTick = true;
-          analyticsEvents.emit('hit_updated', { signalId, channel, pair, hitType: 'derivedSl8Hit' });
-        }
-        if (!hitFlags.derivedSl10Hit && derivedSl10 > 0 && price <= derivedSl10) {
-          hitFlags.derivedSl10Hit = true;
-          hitsChangedThisTick = true;
-          analyticsEvents.emit('hit_updated', { signalId, channel, pair, hitType: 'derivedSl10Hit' });
-        }
-        if (!hitFlags.derivedSl12Hit && derivedSl12 > 0 && price <= derivedSl12) {
-          hitFlags.derivedSl12Hit = true;
-          hitsChangedThisTick = true;
-          analyticsEvents.emit('hit_updated', { signalId, channel, pair, hitType: 'derivedSl12Hit' });
-        }
-      } else {
-        // --- SELL EVALUATION ---
-        if (!hitFlags.tp1Hit && tp1 > 0 && price <= tp1) {
-          hitFlags.tp1Hit = true;
-          hitsChangedThisTick = true;
-          analyticsEvents.emit('hit_updated', { signalId, channel, pair, hitType: 'tp1Hit' });
-        }
-        if (!hitFlags.tp2Hit && tp2 > 0 && price <= tp2) {
-          hitFlags.tp2Hit = true;
-          hitsChangedThisTick = true;
-          analyticsEvents.emit('hit_updated', { signalId, channel, pair, hitType: 'tp2Hit' });
-        }
-        if (!hitFlags.tp3Hit && tp3 > 0 && price <= tp3) {
-          hitFlags.tp3Hit = true;
-          hitsChangedThisTick = true;
-          analyticsEvents.emit('hit_updated', { signalId, channel, pair, hitType: 'tp3Hit' });
-        }
-        if (!hitFlags.slHit && originalSl > 0 && price >= originalSl) {
-          hitFlags.slHit = true;
-          hitsChangedThisTick = true;
-          analyticsEvents.emit('hit_updated', { signalId, channel, pair, hitType: 'slHit' });
-        }
-        if (!hitFlags.derivedSl8Hit && derivedSl8 > 0 && price >= derivedSl8) {
-          hitFlags.derivedSl8Hit = true;
-          hitsChangedThisTick = true;
-          analyticsEvents.emit('hit_updated', { signalId, channel, pair, hitType: 'derivedSl8Hit' });
-        }
-        if (!hitFlags.derivedSl10Hit && derivedSl10 > 0 && price >= derivedSl10) {
-          hitFlags.derivedSl10Hit = true;
-          hitsChangedThisTick = true;
-          analyticsEvents.emit('hit_updated', { signalId, channel, pair, hitType: 'derivedSl10Hit' });
-        }
-        if (!hitFlags.derivedSl12Hit && derivedSl12 > 0 && price >= derivedSl12) {
-          hitFlags.derivedSl12Hit = true;
-          hitsChangedThisTick = true;
-          analyticsEvents.emit('hit_updated', { signalId, channel, pair, hitType: 'derivedSl12Hit' });
+      session.status = 'MONITORING';
+      session.lastTickPrice = price;
+      evaluatedCount++;
+
+      const isBuy = session.direction === 'BUY';
+
+      // 1. EVALUATE SINGLE ACTIVE TP POINTER
+      const currentTp = session.tpQueue[session.activeTpPointer];
+      if (currentTp) {
+        const tpMatures = isBuy ? price >= currentTp.price : price <= currentTp.price;
+        if (tpMatures) {
+          this.processTpHit(session, currentTp, price, timestamp);
+          tpCount++;
         }
       }
 
-      if (hitsChangedThisTick) {
-        updatedHitsCount++;
-        logger.info(`[MonitoringEngine] Signal ${signalId} (${pair}) updated hit flags at price ${price}`);
-      }
-
-      // Signal Completion & Eviction Condition: Full TP (TP3) OR Original SL hit
-      const isCompleted = hitFlags.tp3Hit || hitFlags.slHit;
-      if (isCompleted) {
-        signal.status = 'COMPLETED';
-        activeSignalManager.removeActiveSignal(signalId);
+      // If session completed on Full TP terminal state, skip SL check for this tick
+      if (session.status === 'COMPLETED_FULL_TP') {
         completedCount++;
-        
-        analyticsEvents.emit('signal_completed', {
-          signalId,
-          channel,
-          pair,
-          status: 'COMPLETED',
-          hitFlags: { ...hitFlags },
-        });
+        continue;
+      }
 
-        logger.info(`[MonitoringEngine] Signal ${signalId} marked COMPLETED and evicted from active memory`);
+      // 2. EVALUATE SINGLE ACTIVE SL POINTER
+      const currentSl = session.slQueue[session.activeSlPointer];
+      if (currentSl) {
+        const slMatures = isBuy ? price <= currentSl.price : price >= currentSl.price;
+        if (slMatures) {
+          this.processSlHit(session, currentSl, price, timestamp);
+          slCount++;
+          if (session.status === 'COMPLETED_ORIGINAL_SL') {
+            completedCount++;
+          }
+        }
       }
     }
 
     return {
-      symbol: pair,
-      price,
-      evaluatedCount: pairSignals.length,
-      updatedHitsCount,
+      evaluatedCount,
+      tpCount,
+      slCount,
       completedCount,
     };
   }
+
+  /**
+   * Process TP Milestone Hit
+   */
+  processTpHit(session, tp, hitPrice, timestamp) {
+    const level = tp.level;
+    const flagKey = level === 1 ? 'tp1Recorded' : level === 2 ? 'tp2Recorded' : level === 3 ? 'tp3Recorded' : 'fullTpRecorded';
+
+    // Deduplication check: Prevent duplicate recording of already processed milestone
+    if (session.recordedFlags[flagKey]) {
+      if (tp.isFullTp && session.status !== 'COMPLETED_FULL_TP') {
+        session.status = 'COMPLETED_FULL_TP';
+        sessionRegistry.evictSession(session.sessionId);
+      } else {
+        session.activeTpPointer++;
+      }
+      return;
+    }
+
+    // Calculate Raw Milestone Dollar Value ($)
+    const dollarVal = dollarLedgerService.calculateMilestoneDollar(
+      session.entryPrice,
+      tp.price,
+      session.fixedLotSize
+    );
+
+    // Record Milestone Dollar in Session
+    const dollarKey = level === 1 ? 'tp1Dollar' : level === 2 ? 'tp2Dollar' : level === 3 ? 'tp3Dollar' : 'fullTpDollar';
+    session.milestoneDollars[dollarKey] = dollarVal;
+    if (tp.isFullTp) {
+      session.milestoneDollars.fullTpDollar = dollarVal;
+      session.recordedFlags.fullTpRecorded = true;
+    }
+    session.recordedFlags[flagKey] = true;
+
+    // Append Complete Immutable Audit Record
+    const milestoneName = tp.isFullTp ? 'FULL_TP' : `TP${level}`;
+    session.milestoneHistory.push({
+      milestone: milestoneName,
+      price: hitPrice,
+      dollarValue: dollarVal,
+      timestamp,
+      direction: session.direction,
+      signalId: session.signalId,
+      channel: session.channel,
+    });
+
+    session.isDirty = true;
+    session.lastUpdated = timestamp;
+
+    logger.info(`[MonitoringEngine] Session ${session.sessionId} recorded ${milestoneName} @ ${hitPrice} ($${dollarVal})`);
+
+    // Accumulate Milestone in Realtime Analytics Aggregator
+    analyticsEngine.recordMilestoneHit(session.channel, milestoneName, dollarVal);
+
+    // Emit Event
+    analyticsEvents.emit('TP_POINTER_MOVED', {
+      sessionId: session.sessionId,
+      signalId: session.signalId,
+      channel: session.channel,
+      milestone: milestoneName,
+      dollarValue: dollarVal,
+      isFullTp: tp.isFullTp,
+    });
+
+    if (tp.isFullTp) {
+      // TERMINAL CONDITION 1: Full TP Hit
+      session.status = 'COMPLETED_FULL_TP';
+      logger.info(`[MonitoringEngine] Session ${session.sessionId} reached Full TP terminal condition.`);
+
+      analyticsEvents.emit('SESSION_COMPLETED', {
+        sessionId: session.sessionId,
+        signalId: session.signalId,
+        channel: session.channel,
+        terminalStatus: 'COMPLETED_FULL_TP',
+      });
+
+      sessionRegistry.evictSession(session.sessionId);
+    } else {
+      // Advance Active TP Pointer ONLY
+      session.activeTpPointer++;
+    }
+  }
+
+  /**
+   * Process SL Milestone Hit
+   */
+  processSlHit(session, sl, hitPrice, timestamp) {
+    const slName = sl.name;
+    const flagKey = slName === 'SL8' ? 'sl8Recorded' : slName === 'SL10' ? 'sl10Recorded' : slName === 'SL12' ? 'sl12Recorded' : 'originalSlRecorded';
+
+    // Deduplication check: Prevent duplicate recording of already processed milestone
+    if (session.recordedFlags[flagKey]) {
+      if (sl.isTerminal && session.status !== 'COMPLETED_ORIGINAL_SL') {
+        session.status = 'COMPLETED_ORIGINAL_SL';
+        sessionRegistry.evictSession(session.sessionId);
+      } else {
+        session.activeSlPointer++;
+      }
+      return;
+    }
+
+    // Calculate Raw Milestone Dollar Value ($)
+    const dollarVal = dollarLedgerService.calculateMilestoneDollar(
+      session.entryPrice,
+      sl.price,
+      session.fixedLotSize
+    );
+
+    // Record Milestone Dollar in Session
+    const dollarKey = slName === 'SL8' ? 'sl8Dollar' : slName === 'SL10' ? 'sl10Dollar' : slName === 'SL12' ? 'sl12Dollar' : 'originalSlDollar';
+    session.milestoneDollars[dollarKey] = dollarVal;
+    session.recordedFlags[flagKey] = true;
+
+    // Append Complete Immutable Audit Record
+    session.milestoneHistory.push({
+      milestone: slName,
+      price: hitPrice,
+      dollarValue: dollarVal,
+      timestamp,
+      direction: session.direction,
+      signalId: session.signalId,
+      channel: session.channel,
+    });
+
+    session.isDirty = true;
+    session.lastUpdated = timestamp;
+
+    logger.info(`[MonitoringEngine] Session ${session.sessionId} recorded ${slName} @ ${hitPrice} ($${dollarVal})`);
+
+    // Accumulate Milestone in Realtime Analytics Aggregator
+    analyticsEngine.recordMilestoneHit(session.channel, slName, dollarVal);
+
+    // Emit Event
+    analyticsEvents.emit('SL_POINTER_MOVED', {
+      sessionId: session.sessionId,
+      signalId: session.signalId,
+      channel: session.channel,
+      milestone: slName,
+      dollarValue: dollarVal,
+      isTerminal: sl.isTerminal,
+    });
+
+    if (sl.isTerminal) {
+      // TERMINAL CONDITION 2: Original SL Hit
+      session.status = 'COMPLETED_ORIGINAL_SL';
+      logger.info(`[MonitoringEngine] Session ${session.sessionId} reached Original SL terminal condition.`);
+
+      analyticsEvents.emit('SESSION_COMPLETED', {
+        sessionId: session.sessionId,
+        signalId: session.signalId,
+        channel: session.channel,
+        terminalStatus: 'COMPLETED_ORIGINAL_SL',
+      });
+
+      sessionRegistry.evictSession(session.sessionId);
+    } else {
+      // Advance Active SL Pointer ONLY
+      session.activeSlPointer++;
+    }
+  }
 }
 
-module.exports = new MonitoringEngine();
-
+module.exports = new MilestoneMonitoringEngine();

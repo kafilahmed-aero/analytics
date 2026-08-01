@@ -1,239 +1,216 @@
-const analyticsEvents = require('../events/analyticsEvents');
-const persistenceService = require('./persistence.service');
 const logger = require('../utils/logger');
+const persistenceService = require('./persistence.service');
 
-// Constant reserved for future financial analytics calculations
-const FIXED_LOT_SIZE = 0.01;
-
-class AnalyticsEngine {
+class AnalyticsEngineService {
   constructor() {
-    this.FIXED_LOT_SIZE = FIXED_LOT_SIZE;
-    
-    // In-memory cumulative statistics stores: Map<identifier, CumulativeMetrics> (Live Source of Truth)
-    this.channelStats = new Map();
-    this.pairStats = new Map();
+    this.bootTime = new Date();
+    this.channelStats = new Map(); // Map<channel, ChannelStats>
+    this.pairStats = new Map();    // Map<pair, PairStats> (XAUUSD only)
 
-    // Dirty-state persistence sets tracking unpersisted changed keys
     this.dirtyChannels = new Set();
     this.dirtyPairs = new Set();
-
-    this._initializeListeners();
-    logger.info('[AnalyticsEngine] Initialized and subscribed to monitoring events');
   }
 
   /**
-   * Hydrate in-memory maps and syncState lastCursor from MongoDB on application startup.
+   * Helper: Initialize Blank Channel Record
    */
-  async hydrateFromDatabase() {
-    const outcomeSyncService = require('./outcomeSync.service');
-    const { channelMap, pairMap, lastCursor } = await persistenceService.hydrateAnalytics();
-    this.channelStats = channelMap;
-    this.pairStats = pairMap;
-    this.dirtyChannels.clear();
-    this.dirtyPairs.clear();
-
-    if (lastCursor) {
-      outcomeSyncService.setLastCursor(lastCursor);
-    }
-
-    logger.info(`[AnalyticsEngine] Memory live state hydrated (${this.channelStats.size} channels, ${this.pairStats.size} pairs, lastCursor: "${lastCursor}")`);
-  }
-
-  /**
-   * Helper factory creating a clean cumulative metrics state object.
-   */
-  _createEmptyMetrics(identifier) {
+  createBlankChannelRecord(channelName) {
     return {
-      identifier: String(identifier).toUpperCase(),
-      totalSignals: 0,
-      tp1Hits: 0,
-      tp2Hits: 0,
-      tp3Hits: 0,
-      fullTpHits: 0,
-      originalSlHits: 0,
-      sl8Hits: 0,
-      sl10Hits: 0,
-      sl12Hits: 0,
+      channel: channelName,
+      totalSignalsProcessed: 0,
+      totalTp1Hits: 0,
+      totalTp1Dollars: 0.0,
+      totalTp2Hits: 0,
+      totalTp2Dollars: 0.0,
+      totalTp3Hits: 0,
+      totalTp3Dollars: 0.0,
+      totalFullTpHits: 0,
+      totalFullTpDollars: 0.0,
+      totalSl8Hits: 0,
+      totalSl8Dollars: 0.0,
+      totalSl10Hits: 0,
+      totalSl10Dollars: 0.0,
+      totalSl12Hits: 0,
+      totalSl12Dollars: 0.0,
+      totalOriginalSlHits: 0,
+      totalOriginalSlDollars: 0.0,
       lastUpdated: new Date().toISOString(),
     };
   }
 
   /**
-   * Retrieve or create a metrics entry for channel/pair.
+   * Helper: Initialize Blank Pair Record (XAUUSD)
    */
-  _getOrCreateMetrics(store, key) {
-    const safeKey = String(key).toUpperCase();
-    if (!store.has(safeKey)) {
-      store.set(safeKey, this._createEmptyMetrics(safeKey));
+  createBlankPairRecord(pairName = 'XAUUSD') {
+    return {
+      pair: pairName,
+      totalSignalsProcessed: 0,
+      totalTp1Hits: 0,
+      totalTp1Dollars: 0.0,
+      totalTp2Hits: 0,
+      totalTp2Dollars: 0.0,
+      totalTp3Hits: 0,
+      totalTp3Dollars: 0.0,
+      totalFullTpHits: 0,
+      totalFullTpDollars: 0.0,
+      totalSl8Hits: 0,
+      totalSl8Dollars: 0.0,
+      totalSl10Hits: 0,
+      totalSl10Dollars: 0.0,
+      totalSl12Hits: 0,
+      totalSl12Dollars: 0.0,
+      totalOriginalSlHits: 0,
+      totalOriginalSlDollars: 0.0,
+      lastUpdated: new Date().toISOString(),
+    };
+  }
+
+  /**
+   * Startup Hydration: Load Channel & Pair Statistics from MongoDB
+   */
+  async hydrateFromDatabase() {
+    logger.info('[AnalyticsEngine] Hydrating channel & pair analytics from MongoDB...');
+    try {
+      const { channelRecords, pairRecords } = await persistenceService.hydrateAnalytics();
+
+      for (const rec of channelRecords) {
+        this.channelStats.set(rec.channel, {
+          channel: rec.channel,
+          totalSignalsProcessed: rec.totalSignalsProcessed || 0,
+          totalTp1Hits: rec.totalTp1Hits || 0,
+          totalTp1Dollars: rec.totalTp1Dollars || 0,
+          totalTp2Hits: rec.totalTp2Hits || 0,
+          totalTp2Dollars: rec.totalTp2Dollars || 0,
+          totalTp3Hits: rec.totalTp3Hits || 0,
+          totalTp3Dollars: rec.totalTp3Dollars || 0,
+          totalFullTpHits: rec.totalFullTpHits || 0,
+          totalFullTpDollars: rec.totalFullTpDollars || 0,
+          totalSl8Hits: rec.totalSl8Hits || 0,
+          totalSl8Dollars: rec.totalSl8Dollars || 0,
+          totalSl10Hits: rec.totalSl10Hits || 0,
+          totalSl10Dollars: rec.totalSl10Dollars || 0,
+          totalSl12Hits: rec.totalSl12Hits || 0,
+          totalSl12Dollars: rec.totalSl12Dollars || 0,
+          totalOriginalSlHits: rec.totalOriginalSlHits || 0,
+          totalOriginalSlDollars: rec.totalOriginalSlDollars || 0,
+          lastUpdated: rec.lastUpdated ? new Date(rec.lastUpdated).toISOString() : new Date().toISOString(),
+        });
+      }
+
+      for (const rec of pairRecords) {
+        this.pairStats.set(rec.pair, {
+          pair: rec.pair,
+          totalSignalsProcessed: rec.totalSignalsProcessed || 0,
+          totalTp1Hits: rec.totalTp1Hits || 0,
+          totalTp1Dollars: rec.totalTp1Dollars || 0,
+          totalTp2Hits: rec.totalTp2Hits || 0,
+          totalTp2Dollars: rec.totalTp2Dollars || 0,
+          totalTp3Hits: rec.totalTp3Hits || 0,
+          totalTp3Dollars: rec.totalTp3Dollars || 0,
+          totalFullTpHits: rec.totalFullTpHits || 0,
+          totalFullTpDollars: rec.totalFullTpDollars || 0,
+          totalSl8Hits: rec.totalSl8Hits || 0,
+          totalSl8Dollars: rec.totalSl8Dollars || 0,
+          totalSl10Hits: rec.totalSl10Hits || 0,
+          totalSl10Dollars: rec.totalSl10Dollars || 0,
+          totalSl12Hits: rec.totalSl12Hits || 0,
+          totalSl12Dollars: rec.totalSl12Dollars || 0,
+          totalOriginalSlHits: rec.totalOriginalSlHits || 0,
+          totalOriginalSlDollars: rec.totalOriginalSlDollars || 0,
+          lastUpdated: rec.lastUpdated ? new Date(rec.lastUpdated).toISOString() : new Date().toISOString(),
+        });
+      }
+
+      logger.info(`[AnalyticsEngine] Hydrated ${this.channelStats.size} channels and ${this.pairStats.size} pairs from MongoDB.`);
+    } catch (err) {
+      logger.error('[AnalyticsEngine] Failed to hydrate analytics from MongoDB:', err);
     }
-    return store.get(safeKey);
   }
 
   /**
-   * Subscribe to events emitted by MonitoringEngine.
+   * Register a New Active Signal Ingested
    */
-  _initializeListeners() {
-    // 1. React to individual hit flag updates
-    analyticsEvents.on('hit_updated', ({ channel, pair, hitType }) => {
-      this._recordHit(channel, pair, hitType);
-    });
+  recordNewSignal(channelName, pairName = 'XAUUSD') {
+    const chanKey = String(channelName).toUpperCase();
+    const pairKey = String(pairName).toUpperCase();
 
-    // 2. React to signal completion events
-    analyticsEvents.on('signal_completed', ({ channel, pair }) => {
-      this._recordCompletion(channel, pair);
-    });
+    if (!this.channelStats.has(chanKey)) {
+      this.channelStats.set(chanKey, this.createBlankChannelRecord(chanKey));
+    }
+    if (!this.pairStats.has(pairKey)) {
+      this.pairStats.set(pairKey, this.createBlankPairRecord(pairKey));
+    }
+
+    const chanRec = this.channelStats.get(chanKey);
+    const pairRec = this.pairStats.get(pairKey);
+
+    chanRec.totalSignalsProcessed++;
+    chanRec.lastUpdated = new Date().toISOString();
+
+    pairRec.totalSignalsProcessed++;
+    pairRec.lastUpdated = new Date().toISOString();
+
+    this.dirtyChannels.add(chanKey);
+    this.dirtyPairs.add(pairKey);
   }
 
   /**
-   * Record target hit flag update for channel and pair, marking keys as dirty.
+   * Realtime Milestone Hit Accumulator (Hit Count + Dollar Total)
    */
-  _recordHit(channel, pair, hitType) {
-    const timestamp = new Date().toISOString();
-    const hitMap = {
-      tp1Hit: 'tp1Hits',
-      tp2Hit: 'tp2Hits',
-      tp3Hit: 'tp3Hits',
-      fullTpHit: 'fullTpHits',
-      slHit: 'originalSlHits',
-      derivedSl8Hit: 'sl8Hits',
-      derivedSl10Hit: 'sl10Hits',
-      derivedSl12Hit: 'sl12Hits',
+  recordMilestoneHit(channelName, milestoneName, dollarValue) {
+    const chanKey = String(channelName).toUpperCase();
+    const pairKey = 'XAUUSD';
+
+    if (!this.channelStats.has(chanKey)) {
+      this.channelStats.set(chanKey, this.createBlankChannelRecord(chanKey));
+    }
+    if (!this.pairStats.has(pairKey)) {
+      this.pairStats.set(pairKey, this.createBlankPairRecord(pairKey));
+    }
+
+    const chanRec = this.channelStats.get(chanKey);
+    const pairRec = this.pairStats.get(pairKey);
+    const val = parseFloat(dollarValue) || 0.0;
+
+    const keyMap = {
+      TP1: { hits: 'totalTp1Hits', dollars: 'totalTp1Dollars' },
+      TP2: { hits: 'totalTp2Hits', dollars: 'totalTp2Dollars' },
+      TP3: { hits: 'totalTp3Hits', dollars: 'totalTp3Dollars' },
+      FULL_TP: { hits: 'totalFullTpHits', dollars: 'totalFullTpDollars' },
+      SL8: { hits: 'totalSl8Hits', dollars: 'totalSl8Dollars' },
+      SL10: { hits: 'totalSl10Hits', dollars: 'totalSl10Dollars' },
+      SL12: { hits: 'totalSl12Hits', dollars: 'totalSl12Dollars' },
+      ORIGINAL_SL: { hits: 'totalOriginalSlHits', dollars: 'totalOriginalSlDollars' },
     };
 
-    const counterProp = hitMap[hitType];
-    if (!counterProp) return;
+    const target = keyMap[milestoneName];
+    if (target) {
+      chanRec[target.hits]++;
+      chanRec[target.dollars] = Number((chanRec[target.dollars] + val).toFixed(2));
+      chanRec.lastUpdated = new Date().toISOString();
 
-    if (channel) {
-      const safeChannel = String(channel).toUpperCase();
-      const channelMetric = this._getOrCreateMetrics(this.channelStats, safeChannel);
-      channelMetric[counterProp] += 1;
-      if (hitType === 'tp3Hit') {
-        channelMetric.fullTpHits += 1;
-      }
-      channelMetric.lastUpdated = timestamp;
-      this.dirtyChannels.add(safeChannel);
+      pairRec[target.hits]++;
+      pairRec[target.dollars] = Number((pairRec[target.dollars] + val).toFixed(2));
+      pairRec.lastUpdated = new Date().toISOString();
+
+      this.dirtyChannels.add(chanKey);
+      this.dirtyPairs.add(pairKey);
     }
-
-    if (pair) {
-      const safePair = String(pair).toUpperCase();
-      const pairMetric = this._getOrCreateMetrics(this.pairStats, safePair);
-      pairMetric[counterProp] += 1;
-      if (hitType === 'tp3Hit') {
-        pairMetric.fullTpHits += 1;
-      }
-      pairMetric.lastUpdated = timestamp;
-      this.dirtyPairs.add(safePair);
-    }
-
-    logger.info(`[AnalyticsEngine] Incremented ${counterProp} for channel [${channel}] and pair [${pair}]`);
   }
 
   /**
-   * Record signal completion for channel and pair, marking keys as dirty.
-   */
-  _recordCompletion(channel, pair) {
-    const timestamp = new Date().toISOString();
-
-    if (channel) {
-      const safeChannel = String(channel).toUpperCase();
-      const channelMetric = this._getOrCreateMetrics(this.channelStats, safeChannel);
-      channelMetric.totalSignals += 1;
-      channelMetric.lastUpdated = timestamp;
-      this.dirtyChannels.add(safeChannel);
-    }
-
-    if (pair) {
-      const safePair = String(pair).toUpperCase();
-      const pairMetric = this._getOrCreateMetrics(this.pairStats, safePair);
-      pairMetric.totalSignals += 1;
-      pairMetric.lastUpdated = timestamp;
-      this.dirtyPairs.add(safePair);
-    }
-
-    logger.info(`[AnalyticsEngine] Incremented totalSignals for channel [${channel}] and pair [${pair}]`);
-  }
-
-  /**
-   * Record completed signal outcome payload delivered from FX Desk Pro via integration bridge.
-   * Updates channel/pair metrics idempotently and marks keys as dirty.
-   */
-  recordCompletedOutcome(outcome) {
-    if (!outcome) return;
-    const channel = outcome.channel || outcome.channelName;
-    const pair = outcome.pair || outcome.symbol;
-    if (!channel) return;
-
-    const timestamp = new Date().toISOString();
-    const safeChannel = String(channel).toUpperCase();
-    const channelMetric = this._getOrCreateMetrics(this.channelStats, safeChannel);
-
-    channelMetric.totalSignals += 1;
-
-    const targetHits = outcome.targetHits || {};
-    if (targetHits.tp1Hit || outcome.tp1Hit || outcome.status === 'PARTIAL_TP' || outcome.status === 'FULL_TP') {
-      channelMetric.tp1Hits += 1;
-    }
-    if (targetHits.tp2Hit || outcome.tp2Hit || outcome.status === 'FULL_TP') {
-      channelMetric.tp2Hits += 1;
-    }
-    if (targetHits.tp3Hit || outcome.tp3Hit || outcome.status === 'FULL_TP') {
-      channelMetric.tp3Hits += 1;
-      channelMetric.fullTpHits += 1;
-    }
-    if (targetHits.slHit || outcome.slHit || outcome.status === 'SL_HIT') {
-      channelMetric.originalSlHits += 1;
-    }
-    if (targetHits.derivedSl8Hit || outcome.derivedSl8Hit) {
-      channelMetric.sl8Hits += 1;
-    }
-    if (targetHits.derivedSl10Hit || outcome.derivedSl10Hit) {
-      channelMetric.sl10Hits += 1;
-    }
-    if (targetHits.derivedSl12Hit || outcome.derivedSl12Hit) {
-      channelMetric.sl12Hits += 1;
-    }
-
-    channelMetric.lastUpdated = timestamp;
-    this.dirtyChannels.add(safeChannel);
-
-    if (pair) {
-      const safePair = String(pair).toUpperCase();
-      const pairMetric = this._getOrCreateMetrics(this.pairStats, safePair);
-      pairMetric.totalSignals += 1;
-      if (targetHits.tp1Hit || outcome.tp1Hit || outcome.status === 'PARTIAL_TP' || outcome.status === 'FULL_TP') pairMetric.tp1Hits += 1;
-      if (targetHits.tp2Hit || outcome.tp2Hit || outcome.status === 'FULL_TP') pairMetric.tp2Hits += 1;
-      if (targetHits.tp3Hit || outcome.tp3Hit || outcome.status === 'FULL_TP') {
-        pairMetric.tp3Hits += 1;
-        pairMetric.fullTpHits += 1;
-      }
-      if (targetHits.slHit || outcome.slHit || outcome.status === 'SL_HIT') pairMetric.originalSlHits += 1;
-      if (targetHits.derivedSl8Hit || outcome.derivedSl8Hit) pairMetric.sl8Hits += 1;
-      if (targetHits.derivedSl10Hit || outcome.derivedSl10Hit) pairMetric.sl10Hits += 1;
-      if (targetHits.derivedSl12Hit || outcome.derivedSl12Hit) pairMetric.sl12Hits += 1;
-      pairMetric.lastUpdated = timestamp;
-      this.dirtyPairs.add(safePair);
-    }
-
-    logger.info(`[AnalyticsEngine] Recorded completed outcome for channel [${safeChannel}] (status: ${outcome.status})`);
-  }
-
-  /**
-   * Flush only dirty records to MongoDB using Atomic Dirty-State Persistence Strategy.
+   * Flush Pending Dirty Records to MongoDB
    */
   async flushDirtyAnalytics() {
-    const outcomeSyncService = require('./outcomeSync.service');
-    const currentCursor = outcomeSyncService.getLastCursor();
-
-    if (this.dirtyChannels.size === 0 && this.dirtyPairs.size === 0 && !currentCursor) {
+    if (this.dirtyChannels.size === 0 && this.dirtyPairs.size === 0) {
       return { flushedChannels: 0, flushedPairs: 0 };
     }
 
-    const dirtyChannelItems = Array.from(this.dirtyChannels).map((key) => this.channelStats.get(key)).filter(Boolean);
-    const dirtyPairItems = Array.from(this.dirtyPairs).map((key) => this.pairStats.get(key)).filter(Boolean);
+    const channelsToFlush = Array.from(this.dirtyChannels).map((key) => this.channelStats.get(key));
+    const pairsToFlush = Array.from(this.dirtyPairs).map((key) => this.pairStats.get(key));
 
-    const result = await persistenceService.flushDirtyRecords(dirtyChannelItems, dirtyPairItems, currentCursor);
+    const result = await persistenceService.flushDirtyRecords(channelsToFlush, pairsToFlush);
 
-    // Clear dirty sets after successful flush
     this.dirtyChannels.clear();
     this.dirtyPairs.clear();
 
@@ -241,62 +218,128 @@ class AnalyticsEngine {
   }
 
   /**
-   * Get all aggregated channel cumulative statistics (from live in-memory source of truth).
-   */
-  getChannelAnalytics() {
-    return Array.from(this.channelStats.values());
-  }
-
-  /**
-   * Get all aggregated pair cumulative statistics (from live in-memory source of truth).
-   */
-  getPairAnalytics() {
-    return Array.from(this.pairStats.values());
-  }
-
-  /**
-   * Get overall cumulative summary across channels and pairs.
+   * API Handler: Get Dashboard Overall Summary
    */
   getOverallSummary() {
-    let totalSignals = 0;
-    let totalTp1 = 0;
-    let totalTp2 = 0;
-    let totalTp3 = 0;
-    let totalFullTp = 0;
-    let totalOriginalSl = 0;
-    let totalSl8 = 0;
-    let totalSl10 = 0;
-    let totalSl12 = 0;
+    let totalSignalsProcessed = 0;
+    const totals = {
+      totalTp1Hits: 0,
+      totalTp1Dollars: 0.0,
+      totalTp2Hits: 0,
+      totalTp2Dollars: 0.0,
+      totalTp3Hits: 0,
+      totalTp3Dollars: 0.0,
+      totalFullTpHits: 0,
+      totalFullTpDollars: 0.0,
+      totalSl8Hits: 0,
+      totalSl8Dollars: 0.0,
+      totalSl10Hits: 0,
+      totalSl10Dollars: 0.0,
+      totalSl12Hits: 0,
+      totalSl12Dollars: 0.0,
+      totalOriginalSlHits: 0,
+      totalOriginalSlDollars: 0.0,
+    };
 
-    for (const stats of this.channelStats.values()) {
-      totalSignals += stats.totalSignals;
-      totalTp1 += stats.tp1Hits;
-      totalTp2 += stats.tp2Hits;
-      totalTp3 += stats.tp3Hits;
-      totalFullTp += stats.fullTpHits;
-      totalOriginalSl += stats.originalSlHits;
-      totalSl8 += stats.sl8Hits;
-      totalSl10 += stats.sl10Hits;
-      totalSl12 += stats.sl12Hits;
+    for (const chanRec of this.channelStats.values()) {
+      totalSignalsProcessed += chanRec.totalSignalsProcessed;
+      totals.totalTp1Hits += chanRec.totalTp1Hits;
+      totals.totalTp1Dollars += chanRec.totalTp1Dollars;
+      totals.totalTp2Hits += chanRec.totalTp2Hits;
+      totals.totalTp2Dollars += chanRec.totalTp2Dollars;
+      totals.totalTp3Hits += chanRec.totalTp3Hits;
+      totals.totalTp3Dollars += chanRec.totalTp3Dollars;
+      totals.totalFullTpHits += chanRec.totalFullTpHits;
+      totals.totalFullTpDollars += chanRec.totalFullTpDollars;
+
+      totals.totalSl8Hits += chanRec.totalSl8Hits;
+      totals.totalSl8Dollars += chanRec.totalSl8Dollars;
+      totals.totalSl10Hits += chanRec.totalSl10Hits;
+      totals.totalSl10Dollars += chanRec.totalSl10Dollars;
+      totals.totalSl12Hits += chanRec.totalSl12Hits;
+      totals.totalSl12Dollars += chanRec.totalSl12Dollars;
+      totals.totalOriginalSlHits += chanRec.totalOriginalSlHits;
+      totals.totalOriginalSlDollars += chanRec.totalOriginalSlDollars;
     }
 
+    // Format all dollar sums to 2 decimal places
+    Object.keys(totals).forEach((k) => {
+      if (k.endsWith('Dollars')) {
+        totals[k] = Number(totals[k].toFixed(2));
+      }
+    });
+
+    const uptimeMs = Date.now() - this.bootTime.getTime();
+    const uptimeSec = Math.floor(uptimeMs / 1000);
+
+    // Cumulative Hits object for UI compatibility
+    const cumulativeHits = {
+      tp1Hits: totals.totalTp1Hits,
+      tp1Dollars: totals.totalTp1Dollars,
+      tp2Hits: totals.totalTp2Hits,
+      tp2Dollars: totals.totalTp2Dollars,
+      tp3Hits: totals.totalTp3Hits,
+      tp3Dollars: totals.totalTp3Dollars,
+      fullTpHits: totals.totalFullTpHits,
+      fullTpDollars: totals.totalFullTpDollars,
+      originalSlHits: totals.totalOriginalSlHits,
+      originalSlDollars: totals.totalOriginalSlDollars,
+      sl8Hits: totals.totalSl8Hits,
+      sl8Dollars: totals.totalSl8Dollars,
+      sl10Hits: totals.totalSl10Hits,
+      sl10Dollars: totals.totalSl10Dollars,
+      sl12Hits: totals.totalSl12Hits,
+      sl12Dollars: totals.totalSl12Dollars,
+    };
+
     return {
+      serverStatus: 'online',
+      uptime: `${uptimeSec}s`,
       channelsTracked: this.channelStats.size,
-      pairsTracked: this.pairStats.size,
-      totalSignalsProcessed: totalSignals,
-      cumulativeHits: {
-        tp1Hits: totalTp1,
-        tp2Hits: totalTp2,
-        tp3Hits: totalTp3,
-        fullTpHits: totalFullTp,
-        originalSlHits: totalOriginalSl,
-        sl8Hits: totalSl8,
-        sl10Hits: totalSl10,
-        sl12Hits: totalSl12,
-      },
+      pairsTracked: 1, // XAUUSD permanently
+      totalSignalsProcessed,
+      cumulativeHits,
+      cumulativeMilestoneTotals: totals,
       lastUpdated: new Date().toISOString(),
+    };
+  }
+
+  /**
+   * API Handler: Get Channel Analytics List
+   */
+  getChannelAnalytics(query = {}) {
+    const list = Array.from(this.channelStats.values()).map((row) => ({
+      ...row,
+      identifier: row.channel,
+      totalSignals: row.totalSignalsProcessed,
+      tp1Hits: row.totalTp1Hits,
+      tp1Dollars: row.totalTp1Dollars,
+      tp2Hits: row.totalTp2Hits,
+      tp2Dollars: row.totalTp2Dollars,
+      tp3Hits: row.totalTp3Hits,
+      tp3Dollars: row.totalTp3Dollars,
+      fullTpHits: row.totalFullTpHits,
+      fullTpDollars: row.totalFullTpDollars,
+      originalSlHits: row.totalOriginalSlHits,
+      originalSlDollars: row.totalOriginalSlDollars,
+      sl8Hits: row.totalSl8Hits,
+      sl8Dollars: row.totalSl8Dollars,
+      sl10Hits: row.totalSl10Hits,
+      sl10Dollars: row.totalSl10Dollars,
+      sl12Hits: row.totalSl12Hits,
+      sl12Dollars: row.totalSl12Dollars,
+    }));
+
+    const limit = parseInt(query.limit, 10) || 50;
+
+    return {
+      channels: list.slice(0, limit),
+      pagination: {
+        total: list.length,
+        limit,
+      },
     };
   }
 }
 
-module.exports = new AnalyticsEngine();
+module.exports = new AnalyticsEngineService();

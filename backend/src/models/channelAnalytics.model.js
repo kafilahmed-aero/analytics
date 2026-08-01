@@ -2,31 +2,52 @@ const mongoose = require('mongoose');
 
 const channelAnalyticsSchema = new mongoose.Schema(
   {
-    identifier: {
+    channel: {
       type: String,
       required: true,
       unique: true,
-      uppercase: true,
-      trim: true,
       index: true,
     },
-    totalSignals: { type: Number, default: 0 },
-    tp1Hits: { type: Number, default: 0 },
-    tp2Hits: { type: Number, default: 0 },
-    tp3Hits: { type: Number, default: 0 },
-    fullTpHits: { type: Number, default: 0 },
-    originalSlHits: { type: Number, default: 0 },
-    sl8Hits: { type: Number, default: 0 },
-    sl10Hits: { type: Number, default: 0 },
-    sl12Hits: { type: Number, default: 0 },
-    lastUpdated: { type: Date, default: Date.now },
+    totalSignalsProcessed: {
+      type: Number,
+      default: 0,
+    },
+    
+    // Independent TP Milestone Hit Counts and Dollar Totals
+    totalTp1Hits: { type: Number, default: 0 },
+    totalTp1Dollars: { type: Number, default: 0 },
+
+    totalTp2Hits: { type: Number, default: 0 },
+    totalTp2Dollars: { type: Number, default: 0 },
+
+    totalTp3Hits: { type: Number, default: 0 },
+    totalTp3Dollars: { type: Number, default: 0 },
+
+    totalFullTpHits: { type: Number, default: 0 },
+    totalFullTpDollars: { type: Number, default: 0 },
+
+    // Independent SL Milestone Hit Counts and Dollar Totals
+    totalSl8Hits: { type: Number, default: 0 },
+    totalSl8Dollars: { type: Number, default: 0 },
+
+    totalSl10Hits: { type: Number, default: 0 },
+    totalSl10Dollars: { type: Number, default: 0 },
+
+    totalSl12Hits: { type: Number, default: 0 },
+    totalSl12Dollars: { type: Number, default: 0 },
+
+    totalOriginalSlHits: { type: Number, default: 0 },
+    totalOriginalSlDollars: { type: Number, default: 0 },
+
+    lastUpdated: {
+      type: Date,
+      default: Date.now,
+    },
   },
   {
-    timestamps: false,
-    versionKey: false,
+    collection: 'channelanalytics',
+    timestamps: true,
   }
 );
 
-const ChannelAnalytics = mongoose.model('ChannelAnalytics', channelAnalyticsSchema);
-
-module.exports = ChannelAnalytics;
+module.exports = mongoose.model('ChannelAnalytics', channelAnalyticsSchema);

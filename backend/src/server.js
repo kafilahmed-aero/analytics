@@ -2,37 +2,40 @@ const app = require('./app');
 const envConfig = require('./config/env.config');
 const { connectDatabase, disconnectDatabase } = require('./database/connection');
 const analyticsEngine = require('./services/analyticsEngine.service');
-const outcomeSyncService = require('./services/outcomeSync.service');
+const sessionHydrationService = require('./services/sessionHydration.service');
+const activeSignalIngestionService = require('./services/activeSignalIngestion.service');
 const logger = require('./utils/logger');
 
 let server;
 
 const startServer = async () => {
-  // Validate Environment Variables on boot
+  // 1. Validate Environment Variables on boot
   envConfig.validateEnv();
 
-  // Connect to MongoDB database
+  // 2. Connect to MongoDB database
   await connectDatabase();
 
-  // Hydrate AnalyticsEngine in-memory live state from database
+  // 3. Hydrate AnalyticsEngine in-memory live state from database
   await analyticsEngine.hydrateFromDatabase();
 
-  // Start background completed outcome synchronization bridge
-  outcomeSyncService.start();
+  // 4. Hydrate Active Signal Monitoring Sessions BEFORE Express HTTP server starts
+  await sessionHydrationService.hydrateRegistryOnBoot();
 
-  // Start Express HTTP Server
+  // 5. Start Active Signal Polling Bridge from FX Desk Pro ONLY AFTER hydration completes
+  activeSignalIngestionService.start();
+
+  // 6. Start Express HTTP Server
   server = app.listen(envConfig.port, () => {
     logger.info(`Server listening on port ${envConfig.port} [${envConfig.nodeEnv}]`);
   });
 };
 
-// Graceful shutdown helper:
-// Order: 1. Stop HTTP -> 2. Stop Outcome Sync -> 3. Flush dirty analytics -> 4. Disconnect DB -> 5. Exit 0
+// Graceful shutdown helper
 const shutdownGracefully = async (signal) => {
   logger.info(`Received ${signal}. Initiating graceful shutdown sequence...`);
 
-  // Stop background outcome sync loop
-  outcomeSyncService.stop();
+  // Stop active signal polling bridge
+  activeSignalIngestionService.stop();
 
   if (server) {
     // 1. Stop accepting HTTP requests
@@ -42,7 +45,7 @@ const shutdownGracefully = async (signal) => {
       // 2. Flush dirty analytics records to database
       try {
         const flushResult = await analyticsEngine.flushDirtyAnalytics();
-        logger.info(`[Shutdown 2/3] Flushed pending dirty analytics:`, flushResult);
+        logger.info('[Shutdown 2/3] Flushed pending dirty analytics:', flushResult);
       } catch (err) {
         logger.error('[Shutdown 2/3] Error flushing analytics on shutdown:', err.message);
       }

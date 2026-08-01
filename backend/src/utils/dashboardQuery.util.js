@@ -1,7 +1,6 @@
 /**
  * Utility for processing Channel Analytics datasets for the Dashboard API.
- * Applies case-insensitive search and automatic sorting by totalSignals DESC.
- * Pagination has been completely removed to display all channels in a single response.
+ * Applies case-insensitive search and sorting by totalSignalsProcessed.
  */
 
 const processChannelQuery = (dataset = [], query = {}) => {
@@ -12,15 +11,14 @@ const processChannelQuery = (dataset = [], query = {}) => {
     const term = query.search.trim().toUpperCase();
     if (term) {
       result = result.filter((item) =>
-        item.identifier && item.identifier.toUpperCase().includes(term)
+        item.channel && item.channel.toUpperCase().includes(term)
       );
     }
   }
 
-  // 2. Automatic Ranking / Sorting: Total Signals DESC (Highest active first)
-  result.sort((a, b) => (b.totalSignals || 0) - (a.totalSignals || 0));
+  // 2. Sorting by totalSignalsProcessed DESC
+  result.sort((a, b) => (b.totalSignalsProcessed || 0) - (a.totalSignalsProcessed || 0));
 
-  // 3. Return simplified response format without pagination metadata
   return {
     channels: result,
   };

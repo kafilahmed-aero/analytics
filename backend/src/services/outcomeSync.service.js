@@ -1,112 +1,35 @@
-const fxDeskProService = require('./fxdeskpro.service');
-const analyticsEngine = require('./analyticsEngine.service');
 const logger = require('../utils/logger');
 
+/**
+ * DEPRECATED IN ANALYTICS V2 PHASE 1
+ * OutcomeSyncService is retained only for backward compatibility references.
+ * Analytics V2 operates an Independent Monitoring Session Engine and does not poll completed outcomes.
+ */
 class OutcomeSyncService {
   constructor() {
-    // Opaque cursor token: Analytics NEVER decodes or inspects its structure.
     this.lastCursor = '';
-    
-    // Set for O(1) deduplication check across incoming completed outcomes
     this.processedKeys = new Set();
-    
-    this.syncIntervalMs = 15000; // 15 seconds
-    this.syncTimer = null;
-    this.isSyncing = false;
   }
 
-  /**
-   * Set opaque lastCursor token restored during server startup hydration.
-   */
   setLastCursor(cursor) {
-    if (typeof cursor === 'string') {
-      this.lastCursor = cursor;
-      logger.info(`[OutcomeSyncService] Restored opaque lastCursor from database: "${this.lastCursor}"`);
-    }
+    this.lastCursor = cursor;
   }
 
-  /**
-   * Get current opaque lastCursor token.
-   */
   getLastCursor() {
     return this.lastCursor;
   }
 
-  /**
-   * Start the background outcome synchronization loop.
-   */
   start() {
-    if (this.syncTimer) return;
-    logger.info('[OutcomeSyncService] Starting background completed outcome synchronization loop (15s interval)');
-    
-    // Trigger initial sync immediately
-    this.syncOutcomes();
-
-    this.syncTimer = setInterval(() => {
-      this.syncOutcomes();
-    }, this.syncIntervalMs);
+    logger.info('[OutcomeSyncService] DEPRECATED: Outcome sync loop is disabled in Analytics V2.');
   }
 
-  /**
-   * Stop the background synchronization loop.
-   */
   stop() {
-    if (this.syncTimer) {
-      clearInterval(this.syncTimer);
-      this.syncTimer = null;
-      logger.info('[OutcomeSyncService] Stopped background outcome sync loop');
-    }
+    logger.info('[OutcomeSyncService] DEPRECATED: Outcome sync loop stopped.');
   }
 
-  /**
-   * Execute one synchronization pass.
-   * Requests outcomes from FX Desk Pro passing opaque this.lastCursor,
-   * deduplicates, updates AnalyticsEngine, and replaces this.lastCursor with new nextCursor.
-   */
   async syncOutcomes() {
-    if (this.isSyncing) {
-      logger.debug('[OutcomeSyncService] Sync pass already in progress. Skipping cycle.');
-      return;
-    }
-
-    this.isSyncing = true;
-
-    try {
-      const response = await fxDeskProService.fetchCompletedOutcomes(this.lastCursor, 100);
-      const payload = response.data || {};
-      const outcomes = payload.outcomes || [];
-      const nextCursor = payload.nextCursor || '';
-
-      if (outcomes.length > 0) {
-        let processedCount = 0;
-
-        for (const outcome of outcomes) {
-          const uniqueKey = outcome.messageKey || outcome.signalId || outcome._id;
-          if (!uniqueKey) continue;
-
-          // Deduplication Check
-          if (this.processedKeys.has(uniqueKey)) {
-            continue;
-          }
-
-          // Record completed outcome in Analytics Engine
-          analyticsEngine.recordCompletedOutcome(outcome);
-          this.processedKeys.add(uniqueKey);
-          processedCount++;
-        }
-
-        logger.info(`[OutcomeSyncService] Processed ${processedCount} new completed outcomes. Updating opaque cursor token.`);
-      }
-
-      // Always update opaque cursor if provided by FX Desk Pro
-      if (nextCursor) {
-        this.lastCursor = nextCursor;
-      }
-    } catch (err) {
-      logger.warn(`[OutcomeSyncService] Sync pass skipped or failed: ${err.message}`);
-    } finally {
-      this.isSyncing = false;
-    }
+    // No-op in Analytics V2
+    return;
   }
 }
 

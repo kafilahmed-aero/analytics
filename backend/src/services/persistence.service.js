@@ -1,151 +1,92 @@
-const mongoose = require('mongoose');
+const logger = require('../utils/logger');
 const ChannelAnalytics = require('../models/channelAnalytics.model');
 const PairAnalytics = require('../models/pairAnalytics.model');
-const SyncState = require('../models/syncState.model');
-const logger = require('../utils/logger');
+const MonitoringSession = require('../models/monitoringSession.model');
 
 class PersistenceService {
   /**
-   * Hydrate in-memory maps and syncState lastCursor from MongoDB on server startup.
+   * Startup Hydration: Load ChannelAnalytics & PairAnalytics from MongoDB
    */
   async hydrateAnalytics() {
+    logger.info('[PersistenceService] Reading channel & pair analytics from MongoDB...');
     try {
-      const channels = await ChannelAnalytics.find().lean();
-      const pairs = await PairAnalytics.find().lean();
-      const syncDoc = await SyncState.findById('sync_metadata').lean();
+      const channelRecords = await ChannelAnalytics.find().lean();
+      const pairRecords = await PairAnalytics.find().lean();
 
-      const channelMap = new Map();
-      const pairMap = new Map();
-
-      for (const doc of channels) {
-        channelMap.set(doc.identifier, {
-          identifier: doc.identifier,
-          totalSignals: doc.totalSignals || 0,
-          tp1Hits: doc.tp1Hits || 0,
-          tp2Hits: doc.tp2Hits || 0,
-          tp3Hits: doc.tp3Hits || 0,
-          fullTpHits: doc.fullTpHits || 0,
-          originalSlHits: doc.originalSlHits || 0,
-          sl8Hits: doc.sl8Hits || 0,
-          sl10Hits: doc.sl10Hits || 0,
-          sl12Hits: doc.sl12Hits || 0,
-          lastUpdated: doc.lastUpdated ? doc.lastUpdated.toISOString() : new Date().toISOString(),
-        });
-      }
-
-      for (const doc of pairs) {
-        pairMap.set(doc.identifier, {
-          identifier: doc.identifier,
-          totalSignals: doc.totalSignals || 0,
-          tp1Hits: doc.tp1Hits || 0,
-          tp2Hits: doc.tp2Hits || 0,
-          tp3Hits: doc.tp3Hits || 0,
-          fullTpHits: doc.fullTpHits || 0,
-          originalSlHits: doc.originalSlHits || 0,
-          sl8Hits: doc.sl8Hits || 0,
-          sl10Hits: doc.sl10Hits || 0,
-          sl12Hits: doc.sl12Hits || 0,
-          lastUpdated: doc.lastUpdated ? doc.lastUpdated.toISOString() : new Date().toISOString(),
-        });
-      }
-
-      const lastCursor = syncDoc && syncDoc.lastCursor ? syncDoc.lastCursor : '';
-
-      logger.info(`[PersistenceService] Hydrated ${channelMap.size} channels, ${pairMap.size} pairs, and lastCursor: "${lastCursor}"`);
-      return { channelMap, pairMap, lastCursor };
-    } catch (error) {
-      logger.error(`[PersistenceService] Startup hydration error: ${error.message}`);
-      return { channelMap: new Map(), pairMap: new Map(), lastCursor: '' };
+      return {
+        channelRecords,
+        pairRecords,
+      };
+    } catch (err) {
+      logger.error('[PersistenceService] Error loading records from MongoDB:', err.message);
+      return { channelRecords: [], pairRecords: [] };
     }
   }
 
   /**
-   * Atomically flush dirty channel/pair metrics AND current opaque lastCursor
-   * using a single MongoDB ACID Transaction session when available.
+   * Flush Pending Channel & Pair Records to MongoDB via Atomic Bulk Write
    */
-  async flushDirtyRecords(dirtyChannelItems = [], dirtyPairItems = [], lastCursor = '') {
-    if (dirtyChannelItems.length === 0 && dirtyPairItems.length === 0 && !lastCursor) {
-      return { flushedChannels: 0, flushedPairs: 0 };
-    }
-
-    let session = null;
-    let useTransaction = false;
+  async flushDirtyRecords(channelRecords = [], pairRecords = []) {
+    let flushedChannels = 0;
+    let flushedPairs = 0;
 
     try {
-      // Attempt transaction session if supported by deployment (e.g. MongoDB Atlas replica set)
-      if (mongoose.connection.readyState === 1 && typeof mongoose.startSession === 'function') {
-        try {
-          session = await mongoose.startSession();
-          if (session && typeof session.startTransaction === 'function') {
-            session.startTransaction();
-            useTransaction = true;
-          }
-        } catch (sessErr) {
-          logger.debug(`[PersistenceService] Session start notice (fallback mode): ${sessErr.message}`);
-          session = null;
-          useTransaction = false;
-        }
-      }
-
-      const sessionOption = useTransaction ? { session } : {};
-
-      // 1. Bulk write dirty channels
-      if (dirtyChannelItems.length > 0) {
-        const channelOps = dirtyChannelItems.map((item) => ({
+      if (channelRecords.length > 0) {
+        const channelOps = channelRecords.map((rec) => ({
           updateOne: {
-            filter: { identifier: item.identifier },
-            update: { $set: item },
+            filter: { channel: rec.channel },
+            update: { $set: rec },
             upsert: true,
           },
         }));
-        await ChannelAnalytics.bulkWrite(channelOps, sessionOption);
+
+        const chanResult = await ChannelAnalytics.bulkWrite(channelOps);
+        flushedChannels = chanResult.upsertedCount + chanResult.modifiedCount;
       }
 
-      // 2. Bulk write dirty pairs
-      if (dirtyPairItems.length > 0) {
-        const pairOps = dirtyPairItems.map((item) => ({
+      if (pairRecords.length > 0) {
+        const pairOps = pairRecords.map((rec) => ({
           updateOne: {
-            filter: { identifier: item.identifier },
-            update: { $set: item },
+            filter: { pair: rec.pair },
+            update: { $set: rec },
             upsert: true,
           },
         }));
-        await PairAnalytics.bulkWrite(pairOps, sessionOption);
+
+        const pairResult = await PairAnalytics.bulkWrite(pairOps);
+        flushedPairs = pairResult.upsertedCount + pairResult.modifiedCount;
       }
 
-      // 3. Update syncState lastCursor checkpoint in the same transaction
-      if (lastCursor) {
-        await SyncState.updateOne(
-          { _id: 'sync_metadata' },
-          { $set: { lastCursor, lastSyncAt: new Date() } },
-          { upsert: true, ...sessionOption }
-        );
-      }
+      logger.debug(`[PersistenceService] Atomic bulkWrite completed: ${flushedChannels} channels, ${flushedPairs} pairs flushed.`);
+      return { flushedChannels, flushedPairs };
+    } catch (err) {
+      logger.error('[PersistenceService] Atomic bulkWrite flush ERROR:', err.message);
+      throw err;
+    }
+  }
 
-      // Commit transaction if active
-      if (useTransaction && session) {
-        await session.commitTransaction();
-      }
+  /**
+   * Flush Pending Dirty Monitoring Sessions to MongoDB via Atomic Bulk Write
+   */
+  async flushDirtySessions(sessionRecords = []) {
+    if (!sessionRecords || sessionRecords.length === 0) return { flushedSessions: 0 };
 
-      logger.info(`[PersistenceService] Atomically flushed dirty records (${dirtyChannelItems.length} channels, lastCursor updated)`);
-      return {
-        flushedChannels: dirtyChannelItems.length,
-        flushedPairs: dirtyPairItems.length,
-      };
-    } catch (error) {
-      if (useTransaction && session) {
-        try {
-          await session.abortTransaction();
-        } catch (abortErr) {
-          logger.error(`[PersistenceService] Transaction abort error: ${abortErr.message}`);
-        }
-      }
-      logger.error(`[PersistenceService] Flush error: ${error.message}`);
-      return { flushedChannels: 0, flushedPairs: 0, error: error.message };
-    } finally {
-      if (session) {
-        session.endSession();
-      }
+    try {
+      const sessionOps = sessionRecords.map((sess) => ({
+        updateOne: {
+          filter: { sessionId: sess.sessionId },
+          update: { $set: sess },
+          upsert: true,
+        },
+      }));
+
+      const result = await MonitoringSession.bulkWrite(sessionOps);
+      const flushedSessions = result.upsertedCount + result.modifiedCount;
+      logger.debug(`[PersistenceService] Flushed ${flushedSessions} dirty monitoring sessions to MongoDB.`);
+      return { flushedSessions };
+    } catch (err) {
+      logger.error('[PersistenceService] Session bulkWrite flush ERROR:', err.message);
+      throw err;
     }
   }
 }
