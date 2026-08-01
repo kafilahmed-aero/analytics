@@ -34,10 +34,10 @@ export const AnalyticsTable = ({
           <Trophy size={20} style={{ color: 'var(--accent-primary)' }} />
           <div>
             <h2 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
-              Channel Performance Ranking
+              Channel Milestone Measurement Summary
             </h2>
             <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-              Automatically ranked by Total Signals (XAUUSD)
+              Raw Independent Milestone Totals (XAUUSD)
             </span>
           </div>
         </div>
@@ -116,7 +116,7 @@ export const AnalyticsTable = ({
                 zIndex: 10,
               }}
             >
-              <th style={{ padding: '0.875rem 1.25rem', fontWeight: 600 }}>Rank</th>
+              <th style={{ padding: '0.875rem 1.25rem', fontWeight: 600 }}>#</th>
               <th style={{ padding: '0.875rem 1.25rem', fontWeight: 600 }}>Channel Name</th>
               <th style={{ padding: '0.875rem 0.75rem', fontWeight: 600, textAlign: 'center' }}>Total Signals</th>
               <th style={{ padding: '0.875rem 0.75rem', fontWeight: 600, textAlign: 'center', color: '#10b981' }}>TP1</th>

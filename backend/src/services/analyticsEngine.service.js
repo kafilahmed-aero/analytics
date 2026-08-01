@@ -66,69 +66,93 @@ class AnalyticsEngineService {
   }
 
   /**
-   * Startup Hydration: Load Channel & Pair Statistics from MongoDB
+   * Startup Hydration: Load ONLY V2 Channel & Pair Statistics from MongoDB.
+   * V1 legacy documents are detected, logged, and ignored for live calculations.
    */
   async hydrateFromDatabase() {
     logger.info('[AnalyticsEngine] Hydrating channel & pair analytics from MongoDB...');
     try {
       const { channelRecords, pairRecords } = await persistenceService.hydrateAnalytics();
 
+      let v1Count = 0;
+      let v2Count = 0;
+      let ignoredCount = 0;
+
       for (const rec of channelRecords) {
-        this.channelStats.set(rec.channel, {
-          channel: rec.channel,
+        const isV2 = rec.channel !== undefined && String(rec.channel).trim() !== '';
+        const isV1 = !isV2 && rec.identifier !== undefined;
+
+        if (isV1) {
+          v1Count++;
+          // Preserve V1 documents in MongoDB for historical purposes only; ignore for live V2 calculations
+          continue;
+        }
+
+        if (!isV2) {
+          ignoredCount++;
+          continue;
+        }
+
+        v2Count++;
+        const channelName = String(rec.channel).toUpperCase();
+
+        this.channelStats.set(channelName, {
+          channel: channelName,
           totalSignalsProcessed: rec.totalSignalsProcessed || 0,
           totalTp1Hits: rec.totalTp1Hits || 0,
-          totalTp1Dollars: rec.totalTp1Dollars || 0,
+          totalTp1Dollars: rec.totalTp1Dollars || 0.0,
           totalTp2Hits: rec.totalTp2Hits || 0,
-          totalTp2Dollars: rec.totalTp2Dollars || 0,
+          totalTp2Dollars: rec.totalTp2Dollars || 0.0,
           totalTp3Hits: rec.totalTp3Hits || 0,
-          totalTp3Dollars: rec.totalTp3Dollars || 0,
+          totalTp3Dollars: rec.totalTp3Dollars || 0.0,
           totalFullTpHits: rec.totalFullTpHits || 0,
-          totalFullTpDollars: rec.totalFullTpDollars || 0,
+          totalFullTpDollars: rec.totalFullTpDollars || 0.0,
           totalSl8Hits: rec.totalSl8Hits || 0,
-          totalSl8Dollars: rec.totalSl8Dollars || 0,
+          totalSl8Dollars: rec.totalSl8Dollars || 0.0,
           totalSl10Hits: rec.totalSl10Hits || 0,
-          totalSl10Dollars: rec.totalSl10Dollars || 0,
+          totalSl10Dollars: rec.totalSl10Dollars || 0.0,
           totalSl12Hits: rec.totalSl12Hits || 0,
-          totalSl12Dollars: rec.totalSl12Dollars || 0,
+          totalSl12Dollars: rec.totalSl12Dollars || 0.0,
           totalOriginalSlHits: rec.totalOriginalSlHits || 0,
-          totalOriginalSlDollars: rec.totalOriginalSlDollars || 0,
+          totalOriginalSlDollars: rec.totalOriginalSlDollars || 0.0,
           lastUpdated: rec.lastUpdated ? new Date(rec.lastUpdated).toISOString() : new Date().toISOString(),
         });
       }
 
       for (const rec of pairRecords) {
-        this.pairStats.set(rec.pair, {
-          pair: rec.pair,
-          totalSignalsProcessed: rec.totalSignalsProcessed || 0,
-          totalTp1Hits: rec.totalTp1Hits || 0,
-          totalTp1Dollars: rec.totalTp1Dollars || 0,
-          totalTp2Hits: rec.totalTp2Hits || 0,
-          totalTp2Dollars: rec.totalTp2Dollars || 0,
-          totalTp3Hits: rec.totalTp3Hits || 0,
-          totalTp3Dollars: rec.totalTp3Dollars || 0,
-          totalFullTpHits: rec.totalFullTpHits || 0,
-          totalFullTpDollars: rec.totalFullTpDollars || 0,
-          totalSl8Hits: rec.totalSl8Hits || 0,
-          totalSl8Dollars: rec.totalSl8Dollars || 0,
-          totalSl10Hits: rec.totalSl10Hits || 0,
-          totalSl10Dollars: rec.totalSl10Dollars || 0,
-          totalSl12Hits: rec.totalSl12Hits || 0,
-          totalSl12Dollars: rec.totalSl12Dollars || 0,
-          totalOriginalSlHits: rec.totalOriginalSlHits || 0,
-          totalOriginalSlDollars: rec.totalOriginalSlDollars || 0,
-          lastUpdated: rec.lastUpdated ? new Date(rec.lastUpdated).toISOString() : new Date().toISOString(),
-        });
+        if (rec.pair) {
+          this.pairStats.set(rec.pair, {
+            pair: rec.pair,
+            totalSignalsProcessed: rec.totalSignalsProcessed || 0,
+            totalTp1Hits: rec.totalTp1Hits || 0,
+            totalTp1Dollars: rec.totalTp1Dollars || 0.0,
+            totalTp2Hits: rec.totalTp2Hits || 0,
+            totalTp2Dollars: rec.totalTp2Dollars || 0.0,
+            totalTp3Hits: rec.totalTp3Hits || 0,
+            totalTp3Dollars: rec.totalTp3Dollars || 0.0,
+            totalFullTpHits: rec.totalFullTpHits || 0,
+            totalFullTpDollars: rec.totalFullTpDollars || 0.0,
+            totalSl8Hits: rec.totalSl8Hits || 0,
+            totalSl8Dollars: rec.totalSl8Dollars || 0.0,
+            totalSl10Hits: rec.totalSl10Hits || 0,
+            totalSl10Dollars: rec.totalSl10Dollars || 0.0,
+            totalSl12Hits: rec.totalSl12Hits || 0,
+            totalSl12Dollars: rec.totalSl12Dollars || 0.0,
+            totalOriginalSlHits: rec.totalOriginalSlHits || 0,
+            totalOriginalSlDollars: rec.totalOriginalSlDollars || 0.0,
+            lastUpdated: rec.lastUpdated ? new Date(rec.lastUpdated).toISOString() : new Date().toISOString(),
+          });
+        }
       }
 
-      logger.info(`[AnalyticsEngine] Hydrated ${this.channelStats.size} channels and ${this.pairStats.size} pairs from MongoDB.`);
+      logger.info(`[AnalyticsEngine] Hydration Audit: ${v2Count} V2 active docs loaded, ${v1Count} V1 legacy docs detected & preserved, ${ignoredCount} docs ignored.`);
     } catch (err) {
       logger.error('[AnalyticsEngine] Failed to hydrate analytics from MongoDB:', err);
     }
   }
 
   /**
-   * Register a New Active Signal Ingested
+   * Register a New Unique Active Signal Ingested
    */
   recordNewSignal(channelName, pairName = 'XAUUSD') {
     const chanKey = String(channelName).toUpperCase();

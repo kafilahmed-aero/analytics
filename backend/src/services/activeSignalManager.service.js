@@ -1,5 +1,6 @@
 const logger = require('../utils/logger');
 const analyticsEvents = require('../events/analyticsEvents');
+const analyticsEngine = require('./analyticsEngine.service');
 const { calculateDerivedStopLosses, calculatePipDistance } = require('../utils/pipCalculator');
 
 // Analytics V2 is permanently XAUUSD-only
@@ -229,6 +230,9 @@ class SessionRegistry {
     this.processedKeys.add(sessionId);
 
     session.status = 'WAITING_PRICE';
+
+    // Increment totalSignalsProcessed ONLY when a unique new session is successfully instantiated
+    analyticsEngine.recordNewSignal(channel, SUPPORTED_PAIR);
 
     logger.info(`[SessionRegistry] Instantiated XAUUSD MonitoringSession ${sessionId} (${direction} @ ${entryPrice}, LotSize: ${session.fixedLotSize})`);
 
