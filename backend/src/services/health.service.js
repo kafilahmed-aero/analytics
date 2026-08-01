@@ -24,7 +24,7 @@ const getSystemHealth = () => {
 
   // Perform memory check warning
   const memoryUsage = checkMemoryUsage();
-  const activeSignalsCount = activeSignalManager.getActiveSignals().length;
+  const activeSignalsCount = activeSignalManager.getAllActiveSessions().length;
 
   return {
     serverStatus: 'online',
