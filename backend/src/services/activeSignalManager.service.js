@@ -425,7 +425,9 @@ class SessionRegistry {
     const session = this.sessions.get(sessionId);
     if (!session) return false;
 
-    session.status = 'EVICTED';
+    if (session.status !== 'COMPLETED_FULL_TP' && session.status !== 'COMPLETED_ORIGINAL_SL') {
+      session.status = 'EVICTED';
+    }
     const { signalId, messageKey, channel } = session;
 
     this.sessions.delete(sessionId);

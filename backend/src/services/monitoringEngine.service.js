@@ -12,8 +12,8 @@ class MilestoneMonitoringEngine {
 
   /**
    * Evaluate a normalized live price tick against active XAUUSD sessions.
-   * Single Active TP Pointer & Single Active SL Pointer Parallel Evaluation.
-   * Milestone Recording is Immutable and Implements Deduplication Flags.
+   * - Single Active TP Pointer (Sequential Progression)
+   * - Independent SL Milestone Evaluation (Price-Level Driven, Non-Sequential)
    */
   evaluatePriceTick(priceTick) {
     if (!priceTick || isNaN(priceTick.price) || priceTick.price <= 0) {
@@ -44,7 +44,7 @@ class MilestoneMonitoringEngine {
 
       const isBuy = session.direction === 'BUY';
 
-      // 1. EVALUATE SINGLE ACTIVE TP POINTER
+      // 1. EVALUATE SINGLE ACTIVE TP POINTER (Sequential TP Progression)
       const currentTp = session.tpQueue[session.activeTpPointer];
       if (currentTp) {
         const tpMatures = isBuy ? price >= currentTp.price : price <= currentTp.price;
@@ -60,15 +60,29 @@ class MilestoneMonitoringEngine {
         continue;
       }
 
-      // 2. EVALUATE SINGLE ACTIVE SL POINTER
-      const currentSl = session.slQueue[session.activeSlPointer];
-      if (currentSl) {
-        const slMatures = isBuy ? price <= currentSl.price : price >= currentSl.price;
+      // 2. EVALUATE INDEPENDENT SL MILESTONES (Price-Level Driven, Non-Sequential)
+      // Filter unrecorded SL milestones for this session
+      const unrecordedSls = session.slQueue.filter((sl) => {
+        const flagKey = sl.name === 'SL8' ? 'sl8Recorded' :
+                        sl.name === 'SL10' ? 'sl10Recorded' :
+                        sl.name === 'SL12' ? 'sl12Recorded' : 'originalSlRecorded';
+        return !session.recordedFlags[flagKey];
+      });
+
+      // Sort unrecorded SL milestones in order of proximity to entry price (closest evaluated first)
+      unrecordedSls.sort((a, b) => {
+        return isBuy ? b.price - a.price : a.price - b.price;
+      });
+
+      for (const sl of unrecordedSls) {
+        const slMatures = isBuy ? price <= sl.price : price >= sl.price;
         if (slMatures) {
-          this.processSlHit(session, currentSl, price, timestamp);
+          this.processSlHit(session, sl, price, timestamp);
           slCount++;
+
           if (session.status === 'COMPLETED_ORIGINAL_SL') {
             completedCount++;
+            break; // Terminal condition: Original SL touched, stop further evaluation for this session
           }
         }
       }
@@ -166,7 +180,7 @@ class MilestoneMonitoringEngine {
   }
 
   /**
-   * Process SL Milestone Hit
+   * Process SL Milestone Hit (Independent Milestone Model)
    */
   processSlHit(session, sl, hitPrice, timestamp) {
     const slName = sl.name;
@@ -177,8 +191,6 @@ class MilestoneMonitoringEngine {
       if (sl.isTerminal && session.status !== 'COMPLETED_ORIGINAL_SL') {
         session.status = 'COMPLETED_ORIGINAL_SL';
         sessionRegistry.evictSession(session.sessionId);
-      } else {
-        session.activeSlPointer++;
       }
       return;
     }
@@ -237,9 +249,6 @@ class MilestoneMonitoringEngine {
       });
 
       sessionRegistry.evictSession(session.sessionId);
-    } else {
-      // Advance Active SL Pointer ONLY
-      session.activeSlPointer++;
     }
   }
 }
