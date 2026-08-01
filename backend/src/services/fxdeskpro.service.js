@@ -36,6 +36,7 @@ class FxDeskProService {
           headers: {
             'Content-Type': 'application/json',
             'Accept': 'application/json',
+            ...(envConfig.internalServiceKey ? { 'x-service-key': envConfig.internalServiceKey } : {}),
             ...(options.headers || {}),
           },
         });

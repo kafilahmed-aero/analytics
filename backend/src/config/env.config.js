@@ -5,6 +5,12 @@ const logger = require('../utils/logger');
 dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 
 const validateEnv = () => {
+  if (!process.env.INTERNAL_SERVICE_KEY) {
+    logger.error('[EnvConfig] CRITICAL: INTERNAL_SERVICE_KEY environment variable is missing.');
+    console.error('[ConfigError] CRITICAL: INTERNAL_SERVICE_KEY environment variable is required.');
+    process.exit(1);
+  }
+
   const requiredVars = [
     { name: 'PORT', value: process.env.PORT, default: '5000' },
     { name: 'NODE_ENV', value: process.env.NODE_ENV, default: 'development' },
@@ -13,7 +19,6 @@ const validateEnv = () => {
     { name: 'FX_DESK_PRO_BASE_URL', value: process.env.FX_DESK_PRO_BASE_URL, default: 'http://localhost:4000' },
   ];
 
-  const missing = [];
   requiredVars.forEach((v) => {
     if (!v.value) {
       logger.warn(`[EnvConfig] Missing env var: ${v.name}. Falling back to default: "${v.default}"`);
@@ -30,6 +35,7 @@ const envConfig = Object.freeze({
   corsOrigin: process.env.CORS_ORIGIN || 'http://localhost:5173',
   fxDeskProBaseUrl: process.env.FX_DESK_PRO_BASE_URL || 'http://localhost:4000',
   fxDeskProTimeoutMs: parseInt(process.env.FX_DESK_PRO_TIMEOUT_MS || '5000', 10),
+  internalServiceKey: process.env.INTERNAL_SERVICE_KEY || '',
   isProduction: process.env.NODE_ENV === 'production',
   validateEnv,
 });
