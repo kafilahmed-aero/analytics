@@ -1,24 +1,36 @@
-const fxdeskproService = require('./fxdeskpro.service');
 const tickDispatcher = require('./tickDispatcher.service');
 const logger = require('../utils/logger');
 
+/**
+ * Independent XAUUSD Market Price Consumer
+ * Analytics V2 owns its own independent live XAUUSD market price feed.
+ * NO DEPENDENCY ON FX DESK PRO FOR MARKET PRICES.
+ */
 class XauusdPriceConsumerService {
   constructor() {
     this.intervalId = null;
-    this.pollIntervalMs = 3000; // 3-second live price polling interval
+    this.pollIntervalMs = 3000; // 3-second polling interval
     this.isRunning = false;
     this.sequence = 0;
+    this.lastPrice = null;
+
+    // Independent primary and secondary market data endpoints (Yahoo Finance Spot Gold / Futures)
+    this.endpoints = [
+      'https://query1.finance.yahoo.com/v8/finance/chart/GC=F?interval=1m&range=1d',
+      'https://query2.finance.yahoo.com/v8/finance/chart/GC=F?interval=1m&range=1d',
+      'https://query1.finance.yahoo.com/v8/finance/chart/XAUUSD=X?interval=1m&range=1d',
+    ];
   }
 
   /**
-   * Start continuous live XAUUSD price polling bridge
+   * Start independent continuous live XAUUSD price consumer
    */
   start() {
     if (this.isRunning) return;
     this.isRunning = true;
-    logger.info(`[XAUUSDPriceConsumer] Starting continuous live XAUUSD price consumer (interval: ${this.pollIntervalMs}ms)...`);
+    logger.info(`[XAUUSDPriceConsumer] Starting independent live XAUUSD price consumer (interval: ${this.pollIntervalMs}ms)...`);
 
-    // Poll immediately on start
+    // Poll immediately on startup
     this.pollPrice();
 
     this.intervalId = setInterval(() => {
@@ -27,7 +39,7 @@ class XauusdPriceConsumerService {
   }
 
   /**
-   * Stop continuous live XAUUSD price polling bridge
+   * Stop independent continuous live XAUUSD price consumer
    */
   stop() {
     if (!this.isRunning) return;
@@ -36,31 +48,59 @@ class XauusdPriceConsumerService {
       clearInterval(this.intervalId);
       this.intervalId = null;
     }
-    logger.info('[XAUUSDPriceConsumer] Stopped continuous live XAUUSD price consumer');
+    logger.info('[XAUUSDPriceConsumer] Stopped independent live XAUUSD price consumer');
   }
 
   /**
-   * Fetch current live XAUUSD market price from FX Desk Pro and dispatch tick
+   * Fetch live XAUUSD market price directly from independent market data feeds
    */
   async pollPrice() {
-    try {
-      const healthData = await fxdeskproService.fetchHealth();
-      const xauusdPrice = healthData?.data?.feeds?.yahoo?.xauusdPrice || healthData?.feeds?.yahoo?.xauusdPrice;
+    let lastError = null;
 
-      if (xauusdPrice && !isNaN(xauusdPrice) && parseFloat(xauusdPrice) > 0) {
-        this.sequence++;
-        const tick = {
-          symbol: 'XAUUSD',
-          price: parseFloat(xauusdPrice),
-          sequence: this.sequence,
-          timestamp: new Date().toISOString(),
-        };
+    for (const url of this.endpoints) {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 2500);
 
-        tickDispatcher.processTick(tick);
+      try {
+        const response = await fetch(url, {
+          signal: controller.signal,
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Accept': 'application/json',
+          },
+        });
+
+        clearTimeout(timeoutId);
+
+        if (response.ok) {
+          const data = await response.json();
+          const meta = data.chart?.result?.[0]?.meta;
+          const price = parseFloat(meta?.regularMarketPrice || meta?.chartPreviousClose);
+
+          if (!isNaN(price) && price > 0) {
+            this.sequence++;
+            this.lastPrice = price;
+            const timestamp = new Date().toISOString();
+
+            const tick = {
+              symbol: 'XAUUSD',
+              price,
+              sequence: this.sequence,
+              timestamp,
+            };
+
+            // Dispatch tick to Milestone Monitoring Engine
+            tickDispatcher.processTick(tick);
+            return;
+          }
+        }
+      } catch (err) {
+        clearTimeout(timeoutId);
+        lastError = err;
       }
-    } catch (err) {
-      logger.warn(`[XAUUSDPriceConsumer] Request failed for live market price: ${err.message}`);
     }
+
+    logger.warn(`[XAUUSDPriceConsumer] All independent price endpoints failed: ${lastError ? lastError.message : 'Unknown error'}`);
   }
 }
 
