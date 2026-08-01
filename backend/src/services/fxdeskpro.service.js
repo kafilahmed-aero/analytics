@@ -84,7 +84,6 @@ class FxDeskProService {
   async checkConnection() {
     const timestamp = new Date().toISOString();
     try {
-      // Send health check to FX Desk Pro
       const healthData = await this.fetchHealth();
       return {
         connected: true,
@@ -113,12 +112,15 @@ class FxDeskProService {
    * Fetch active trading signals from FX Desk Pro (Read-Only).
    */
   async fetchActiveSignals() {
-    return await this._request('/api/signals/active');
+    try {
+      return await this._request('/api/signals/active');
+    } catch (err) {
+      return await this._request('/api/signals');
+    }
   }
 
   /**
    * Fetch completed signal outcomes from FX Desk Pro using opaque cursor.
-   * Treats cursor as a completely opaque string token without decoding it.
    */
   async fetchCompletedOutcomes(cursor = '', limit = 100) {
     const params = new URLSearchParams();
