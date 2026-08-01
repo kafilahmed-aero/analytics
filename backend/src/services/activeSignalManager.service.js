@@ -409,6 +409,14 @@ class SessionRegistry {
     return Array.from(this.sessions.values());
   }
 
+  getActiveSignals() {
+    return this.getAllActiveSessions();
+  }
+
+  getActiveCount() {
+    return this.sessions.size;
+  }
+
   evictSession(sessionId) {
     const session = this.sessions.get(sessionId);
     if (!session) return false;
