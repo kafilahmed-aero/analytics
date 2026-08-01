@@ -2,13 +2,20 @@ const asyncHandler = require('../utils/asyncHandler');
 const ApiResponse = require('../utils/apiResponse');
 const HTTP_STATUS = require('../constants/httpStatusCodes');
 const analyticsEngine = require('../services/analyticsEngine.service');
+const priceFeedHealthMonitor = require('../services/priceFeedHealth.service');
 const processChannelQuery = require('../utils/dashboardQuery.util');
 
 const getDashboardSummary = asyncHandler(async (req, res) => {
   const summaryData = analyticsEngine.getOverallSummary();
+  const feedHealth = priceFeedHealthMonitor.getHealthSummary();
+
   const data = {
     serverStatus: 'online',
     uptime: `${Math.floor(process.uptime())}s`,
+    marketStatus: feedHealth.marketStatus,
+    lastMarketPrice: feedHealth.lastMarketPrice,
+    lastMarketTime: feedHealth.lastMarketTime,
+    feedHealth,
     ...summaryData,
   };
 

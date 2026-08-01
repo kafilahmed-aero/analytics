@@ -1,4 +1,5 @@
 const tickDispatcher = require('./tickDispatcher.service');
+const priceFeedHealthMonitor = require('./priceFeedHealth.service');
 const logger = require('../utils/logger');
 
 /**
@@ -13,6 +14,7 @@ class XauusdPriceConsumerService {
     this.isRunning = false;
     this.sequence = 0;
     this.lastPrice = null;
+    this.lastMarketTime = null;
 
     // Independent primary and secondary market data endpoints (Yahoo Finance Spot Gold / Futures)
     this.endpoints = [
@@ -76,17 +78,24 @@ class XauusdPriceConsumerService {
           const data = await response.json();
           const meta = data.chart?.result?.[0]?.meta;
           const price = parseFloat(meta?.regularMarketPrice || meta?.chartPreviousClose);
+          const regularMarketTimeSec = meta?.regularMarketTime;
+          const marketTimeISO = regularMarketTimeSec ? new Date(regularMarketTimeSec * 1000).toISOString() : null;
 
           if (!isNaN(price) && price > 0) {
             this.sequence++;
             this.lastPrice = price;
             const timestamp = new Date().toISOString();
 
+            // Track market state (OPEN vs CLOSED) via market time updates
+            priceFeedHealthMonitor.recordTick(timestamp, marketTimeISO, price);
+
             const tick = {
               symbol: 'XAUUSD',
               price,
               sequence: this.sequence,
               timestamp,
+              marketTimestamp: marketTimeISO,
+              marketStatus: priceFeedHealthMonitor.marketStatus,
             };
 
             // Dispatch tick to Milestone Monitoring Engine
@@ -100,6 +109,7 @@ class XauusdPriceConsumerService {
       }
     }
 
+    priceFeedHealthMonitor.recordDisconnect();
     logger.warn(`[XAUUSDPriceConsumer] All independent price endpoints failed: ${lastError ? lastError.message : 'Unknown error'}`);
   }
 }
