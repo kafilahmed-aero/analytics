@@ -16,12 +16,31 @@ class XauusdPriceConsumerService {
     this.lastPrice = null;
     this.lastMarketTime = null;
 
+    const frontMonth = this.getFrontMonthTicker();
+
     // Independent primary and secondary market data endpoints (Yahoo Finance Spot Gold / Futures)
     this.endpoints = [
+      `https://query1.finance.yahoo.com/v8/finance/chart/${frontMonth}?interval=1m&range=1d`,
+      `https://query2.finance.yahoo.com/v8/finance/chart/${frontMonth}?interval=1m&range=1d`,
       'https://query1.finance.yahoo.com/v8/finance/chart/GC=F?interval=1m&range=1d',
       'https://query2.finance.yahoo.com/v8/finance/chart/GC=F?interval=1m&range=1d',
-      'https://query1.finance.yahoo.com/v8/finance/chart/XAUUSD=X?interval=1m&range=1d',
     ];
+  }
+
+  getFrontMonthTicker() {
+    const now = new Date();
+    const yearShort = String(now.getFullYear()).slice(-2);
+    const month = now.getMonth(); // 0-indexed: 0=Jan, 11=Dec
+    
+    // COMEX gold cycle: G (Feb=1), J (Apr=3), M (Jun=5), Q (Aug=7), V (Oct=9), Z (Dec=11)
+    let code = 'Z';
+    if (month <= 1) code = 'G';
+    else if (month <= 3) code = 'J';
+    else if (month <= 5) code = 'M';
+    else if (month <= 7) code = 'Q';
+    else if (month <= 9) code = 'V';
+    
+    return `GC${code}${yearShort}.CMX`;
   }
 
   /**
