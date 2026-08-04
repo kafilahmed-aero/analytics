@@ -18,8 +18,9 @@ class XauusdPriceConsumerService {
 
     const frontMonth = this.getFrontMonthTicker();
 
-    // Independent primary and secondary market data endpoints (Yahoo Finance Spot Gold / Futures)
+    // Independent primary and secondary market data endpoints (Spot Gold API & Yahoo Finance Futures)
     this.endpoints = [
+      'https://api.gold-api.com/price/XAU',
       `https://query1.finance.yahoo.com/v8/finance/chart/${frontMonth}?interval=1m&range=1d`,
       `https://query2.finance.yahoo.com/v8/finance/chart/${frontMonth}?interval=1m&range=1d`,
       'https://query1.finance.yahoo.com/v8/finance/chart/GC=F?interval=1m&range=1d',
@@ -95,10 +96,18 @@ class XauusdPriceConsumerService {
 
         if (response.ok) {
           const data = await response.json();
-          const meta = data.chart?.result?.[0]?.meta;
-          const price = parseFloat(meta?.regularMarketPrice || meta?.chartPreviousClose);
-          const regularMarketTimeSec = meta?.regularMarketTime;
-          const marketTimeISO = regularMarketTimeSec ? new Date(regularMarketTimeSec * 1000).toISOString() : null;
+          let price = null;
+          let marketTimeISO = null;
+
+          if (url.includes('gold-api.com')) {
+            price = parseFloat(data.price);
+            marketTimeISO = data.updatedAt ? new Date(data.updatedAt).toISOString() : new Date().toISOString();
+          } else {
+            const meta = data.chart?.result?.[0]?.meta;
+            price = parseFloat(meta?.regularMarketPrice || meta?.chartPreviousClose);
+            const regularMarketTimeSec = meta?.regularMarketTime;
+            marketTimeISO = regularMarketTimeSec ? new Date(regularMarketTimeSec * 1000).toISOString() : null;
+          }
 
           if (!isNaN(price) && price > 0) {
             this.sequence++;
