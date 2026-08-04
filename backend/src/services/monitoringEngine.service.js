@@ -39,13 +39,14 @@ class MilestoneMonitoringEngine {
         continue;
       }
 
+      session.lastTickPrice = price;
+
       if (session.status === 'WAITING_PRICE') {
         session.status = 'MONITORING';
         session.isDirty = true;
         sessionPersistence.markDirty(session);
       }
       
-      session.lastTickPrice = price;
       evaluatedCount++;
 
       const isBuy = session.direction === 'BUY';
