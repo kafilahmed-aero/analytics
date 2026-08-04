@@ -6,6 +6,7 @@ const sessionHydrationService = require('./services/sessionHydration.service');
 const sessionPersistenceService = require('./services/sessionPersistence.service');
 const activeSignalIngestionService = require('./services/activeSignalIngestion.service');
 const xauusdPriceConsumerService = require('./services/xauusdPriceConsumer.service');
+const monitoringEngine = require('./services/monitoringEngine.service');
 const logger = require('./utils/logger');
 
 let server;
