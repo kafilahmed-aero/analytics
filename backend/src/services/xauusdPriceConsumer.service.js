@@ -23,8 +23,6 @@ class XauusdPriceConsumerService {
       'https://api.gold-api.com/price/XAU',
       `https://query1.finance.yahoo.com/v8/finance/chart/${frontMonth}?interval=1m&range=1d`,
       `https://query2.finance.yahoo.com/v8/finance/chart/${frontMonth}?interval=1m&range=1d`,
-      'https://query1.finance.yahoo.com/v8/finance/chart/GC=F?interval=1m&range=1d',
-      'https://query2.finance.yahoo.com/v8/finance/chart/GC=F?interval=1m&range=1d',
     ];
   }
 
