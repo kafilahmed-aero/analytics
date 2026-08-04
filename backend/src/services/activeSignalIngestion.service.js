@@ -58,6 +58,13 @@ class ActiveSignalIngestionService {
           // 1. Normalize FX Desk Pro payload to Canonical Analytics Signal model
           const canonicalSignal = normalizeSignal(sig);
 
+          // Filter out signals created before Ledger Reset Time to start clean from zero
+          const signalCreatedAt = canonicalSignal.createdAt ? new Date(canonicalSignal.createdAt) : new Date();
+          const ledgerResetTime = new Date('2026-08-04T20:28:00.000Z');
+          if (signalCreatedAt < ledgerResetTime) {
+            continue;
+          }
+
           // 2. Guard canonical signal against contract mismatches
           const guardResult = payloadContractGuard.validate(canonicalSignal);
           if (!guardResult.valid) {
