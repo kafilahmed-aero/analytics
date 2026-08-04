@@ -147,6 +147,10 @@ class AnalyticsEngineService {
    */
   recordNewSignal(channelName, pairName = 'XAUUSD') {
     const chanKey = String(channelName).toUpperCase();
+    if (chanKey === 'TEST' || chanKey === 'TEST_CHANNEL' || chanKey === 'PROD_TEST') {
+      logger.info(`[AnalyticsEngine] Skipping recordNewSignal for test channel: ${chanKey}`);
+      return;
+    }
     const pairKey = String(pairName).toUpperCase();
 
     if (!this.channelStats.has(chanKey)) {
@@ -174,6 +178,10 @@ class AnalyticsEngineService {
    */
   recordMilestoneHit(channelName, milestoneName, dollarValue) {
     const chanKey = String(channelName).toUpperCase();
+    if (chanKey === 'TEST' || chanKey === 'TEST_CHANNEL' || chanKey === 'PROD_TEST') {
+      logger.info(`[AnalyticsEngine] Skipping recordMilestoneHit for test channel: ${chanKey}`);
+      return;
+    }
     const pairKey = 'XAUUSD';
 
     if (!this.channelStats.has(chanKey)) {
