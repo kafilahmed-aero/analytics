@@ -36,7 +36,7 @@ class PersistenceService {
           rec.identifier = rec.identifier || rec.channel;
           return {
             updateOne: {
-              filter: { channel: rec.channel },
+              filter: { identifier: rec.identifier },
               update: { $set: rec },
               upsert: true,
             },
