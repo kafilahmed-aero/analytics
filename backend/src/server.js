@@ -3,6 +3,7 @@ const envConfig = require('./config/env.config');
 const { connectDatabase, disconnectDatabase } = require('./database/connection');
 const analyticsEngine = require('./services/analyticsEngine.service');
 const sessionHydrationService = require('./services/sessionHydration.service');
+const sessionPersistenceService = require('./services/sessionPersistence.service');
 const activeSignalIngestionService = require('./services/activeSignalIngestion.service');
 const xauusdPriceConsumerService = require('./services/xauusdPriceConsumer.service');
 const logger = require('./utils/logger');
@@ -22,15 +23,19 @@ const startServer = async () => {
   // 4. Hydrate Active Signal Monitoring Sessions BEFORE Express HTTP server starts
   await sessionHydrationService.hydrateRegistryOnBoot();
 
-  // 5. Start Express HTTP Server
+  // 5. Start Background Persistence Services
+  sessionPersistenceService.start(2000);
+  analyticsEngine.startAutoFlush(5000);
+
+  // 6. Start Express HTTP Server
   server = app.listen(envConfig.port, () => {
     logger.info(`Server listening on port ${envConfig.port} [${envConfig.nodeEnv}]`);
   });
 
-  // 6. Start Active Signal Polling Bridge from FX Desk Pro ONLY AFTER hydration completes
+  // 7. Start Active Signal Polling Bridge from FX Desk Pro ONLY AFTER hydration completes
   activeSignalIngestionService.start();
 
-  // 7. Start Continuous XAUUSD Live Price Consumer
+  // 8. Start Continuous XAUUSD Live Price Consumer
   xauusdPriceConsumerService.start();
 };
 
@@ -41,6 +46,14 @@ const shutdownGracefully = async (signal) => {
   // Stop active signal polling bridge & price consumer
   activeSignalIngestionService.stop();
   xauusdPriceConsumerService.stop();
+
+  // Stop background persistence auto-flushers
+  try {
+    await sessionPersistenceService.stop();
+    await analyticsEngine.stopAutoFlush();
+  } catch (err) {
+    logger.error('Error stopping persistence services on shutdown:', err.message);
+  }
 
   if (server) {
     // 1. Stop accepting HTTP requests

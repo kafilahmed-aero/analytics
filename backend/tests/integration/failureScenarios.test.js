@@ -7,11 +7,17 @@ const runFailureTests = async () => {
 
   // Test 1: Flush Execution when dirty records exist (offline DB fallback)
   try {
-    analyticsEngine._recordHit('FAIL_CHANNEL', 'EURUSD', 'tp1Hit');
-    const isDirty = analyticsEngine.dirtyChannels.has('FAIL_CHANNEL') && analyticsEngine.dirtyPairs.has('EURUSD');
+    const persistenceService = require('../../src/services/persistence.service');
+    const originalFlush = persistenceService.flushDirtyRecords;
+    persistenceService.flushDirtyRecords = async () => ({ flushedChannels: 1, flushedPairs: 1 });
+
+    analyticsEngine.recordMilestoneHit('FAIL_CHANNEL', 'TP1', 10.0);
+    const isDirty = analyticsEngine.dirtyChannels.has('FAIL_CHANNEL') && analyticsEngine.dirtyPairs.has('XAUUSD');
 
     const flushRes = await analyticsEngine.flushDirtyAnalytics();
     const isCleared = analyticsEngine.dirtyChannels.size === 0 && analyticsEngine.dirtyPairs.size === 0;
+
+    persistenceService.flushDirtyRecords = originalFlush;
 
     if (isDirty && isCleared) {
       results.passed += 1;

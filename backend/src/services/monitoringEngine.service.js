@@ -251,6 +251,13 @@ class MilestoneMonitoringEngine {
       sessionRegistry.evictSession(session.sessionId);
     }
   }
+
+  /**
+   * Alias for backward test compatibility
+   */
+  processPriceTick(tick) {
+    return this.evaluatePriceTick(tick);
+  }
 }
 
 module.exports = new MilestoneMonitoringEngine();

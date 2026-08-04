@@ -4,8 +4,7 @@ const channelAnalyticsSchema = new mongoose.Schema(
   {
     channel: {
       type: String,
-      required: true,
-      unique: true,
+      required: false,
       index: true,
     },
     identifier: {

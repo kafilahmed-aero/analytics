@@ -1,5 +1,6 @@
 const runUnitTests = require('./unit/signalManager.test');
 const runLifecycleTests = require('./integration/lifecycle.test');
+const runFxDeskProRecoveryTests = require('./integration/fxDeskProRecovery.test');
 const runSimultaneousTests = require('./integration/simultaneousEvents.test');
 const runDashboardApiTests = require('./integration/dashboardApi.test');
 const runOutcomeSyncTests = require('./integration/outcomeSync.test');
@@ -17,6 +18,7 @@ const main = async () => {
   // Execute Test Suites
   suites.push(runUnitTests());
   suites.push(runLifecycleTests());
+  suites.push(runFxDeskProRecoveryTests());
   suites.push(runSimultaneousTests());
   suites.push(runDashboardApiTests());
   suites.push(runOutcomeSyncTests());

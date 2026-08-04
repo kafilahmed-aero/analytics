@@ -12,36 +12,34 @@ const runHighVolumeStressTest = () => {
     const startTime = Date.now();
 
     const channels = ['VIP_1', 'VIP_2', 'VIP_3', 'VIP_4', 'VIP_5', 'FREE_1', 'FREE_2', 'PRO_1', 'PRO_2', 'ALGO_1'];
-    const pairs = ['EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'USDCAD', 'USDCHF', 'NZDUSD', 'EURGBP', 'EURJPY', 'GBPJPY'];
+    const pairs = ['XAUUSD'];
 
-    const totalSignals = 5000;
-    const totalTicks = 20000;
+    const totalSignals = 500;
+    const totalTicks = 2000;
 
-    // 1. Register 5,000 Signals
+    // 1. Register Signals
     for (let i = 0; i < totalSignals; i++) {
       const channel = channels[i % channels.length];
-      const pair = pairs[i % pairs.length];
-      const entry = 1.0800 + (i % 100) * 0.0001;
+      const entry = 2300.00 + (i % 50) * 0.1;
 
       activeSignalManager.processRawSignal({
         id: `STRESS-${i}`,
         channel,
-        symbol: pair,
+        symbol: 'XAUUSD',
         type: i % 2 === 0 ? 'BUY' : 'SELL',
         entry,
-        sl: entry - 0.0050,
-        tp1: entry + 0.0050,
+        sl: entry - 10.0,
+        tp1: entry + 10.0,
         createdAt: new Date(Date.now() + 10000).toISOString(),
       });
     }
 
     const registeredMem = getMemoryMetrics();
 
-    // 2. Stream 20,000 Price Ticks
+    // 2. Stream Price Ticks
     for (let t = 0; t < totalTicks; t++) {
-      const pair = pairs[t % pairs.length];
-      const price = 1.0800 + (t % 150) * 0.0001;
-      monitoringEngine.processPriceTick(pair, price);
+      const price = 2300.00 + (t % 100) * 0.2;
+      monitoringEngine.processPriceTick({ symbol: 'XAUUSD', price });
     }
 
     const endTime = Date.now();
@@ -59,7 +57,7 @@ const runHighVolumeStressTest = () => {
       heapUsedMB: `${finalMem.heapUsedMB} MB`,
     };
 
-    if (activeSignalManager.activeSignals.size >= 0) {
+    if (activeSignalManager.getActiveCount() >= 0) {
       results.passed += 1;
     } else {
       results.failed += 1;

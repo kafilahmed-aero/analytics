@@ -80,74 +80,65 @@ class AnalyticsEngineService {
       let ignoredCount = 0;
 
       for (const rec of channelRecords) {
-        const isV2 = rec.channel !== undefined && String(rec.channel).trim() !== '';
-        const isV1 = !isV2 && rec.identifier !== undefined;
-
-        if (isV1) {
-          v1Count++;
-          // Preserve V1 documents in MongoDB for historical purposes only; ignore for live V2 calculations
-          continue;
-        }
-
-        if (!isV2) {
+        const channelName = String(rec.channel || rec.identifier || '').trim().toUpperCase();
+        if (!channelName) {
           ignoredCount++;
           continue;
         }
 
         v2Count++;
-        const channelName = String(rec.channel).toUpperCase();
-
         this.channelStats.set(channelName, {
           channel: channelName,
           identifier: channelName,
-          totalSignalsProcessed: rec.totalSignalsProcessed || 0,
-          totalTp1Hits: rec.totalTp1Hits || 0,
+          totalSignalsProcessed: rec.totalSignalsProcessed !== undefined ? rec.totalSignalsProcessed : (rec.totalSignals || 0),
+          totalTp1Hits: rec.totalTp1Hits !== undefined ? rec.totalTp1Hits : (rec.tp1Hits || 0),
           totalTp1Dollars: rec.totalTp1Dollars || 0.0,
-          totalTp2Hits: rec.totalTp2Hits || 0,
+          totalTp2Hits: rec.totalTp2Hits !== undefined ? rec.totalTp2Hits : (rec.tp2Hits || 0),
           totalTp2Dollars: rec.totalTp2Dollars || 0.0,
-          totalTp3Hits: rec.totalTp3Hits || 0,
+          totalTp3Hits: rec.totalTp3Hits !== undefined ? rec.totalTp3Hits : (rec.tp3Hits || 0),
           totalTp3Dollars: rec.totalTp3Dollars || 0.0,
-          totalFullTpHits: rec.totalFullTpHits || 0,
+          totalFullTpHits: rec.totalFullTpHits !== undefined ? rec.totalFullTpHits : (rec.fullTpHits || 0),
           totalFullTpDollars: rec.totalFullTpDollars || 0.0,
-          totalSl8Hits: rec.totalSl8Hits || 0,
+          totalSl8Hits: rec.totalSl8Hits !== undefined ? rec.totalSl8Hits : (rec.sl8Hits || 0),
           totalSl8Dollars: rec.totalSl8Dollars || 0.0,
-          totalSl10Hits: rec.totalSl10Hits || 0,
+          totalSl10Hits: rec.totalSl10Hits !== undefined ? rec.totalSl10Hits : (rec.sl10Hits || 0),
           totalSl10Dollars: rec.totalSl10Dollars || 0.0,
-          totalSl12Hits: rec.totalSl12Hits || 0,
+          totalSl12Hits: rec.totalSl12Hits !== undefined ? rec.totalSl12Hits : (rec.sl12Hits || 0),
           totalSl12Dollars: rec.totalSl12Dollars || 0.0,
-          totalOriginalSlHits: rec.totalOriginalSlHits || 0,
+          totalOriginalSlHits: rec.totalOriginalSlHits !== undefined ? rec.totalOriginalSlHits : (rec.originalSlHits || 0),
           totalOriginalSlDollars: rec.totalOriginalSlDollars || 0.0,
           lastUpdated: rec.lastUpdated ? new Date(rec.lastUpdated).toISOString() : new Date().toISOString(),
         });
       }
 
       for (const rec of pairRecords) {
-        if (rec.pair) {
-          this.pairStats.set(rec.pair, {
-            pair: rec.pair,
-            totalSignalsProcessed: rec.totalSignalsProcessed || 0,
-            totalTp1Hits: rec.totalTp1Hits || 0,
+        if (rec.pair || rec.identifier) {
+          const pairKey = String(rec.pair || rec.identifier).toUpperCase();
+          this.pairStats.set(pairKey, {
+            pair: pairKey,
+            totalSignalsProcessed: rec.totalSignalsProcessed !== undefined ? rec.totalSignalsProcessed : (rec.totalSignals || 0),
+            totalTp1Hits: rec.totalTp1Hits !== undefined ? rec.totalTp1Hits : (rec.tp1Hits || 0),
             totalTp1Dollars: rec.totalTp1Dollars || 0.0,
-            totalTp2Hits: rec.totalTp2Hits || 0,
+            totalTp2Hits: rec.totalTp2Hits !== undefined ? rec.totalTp2Hits : (rec.tp2Hits || 0),
             totalTp2Dollars: rec.totalTp2Dollars || 0.0,
-            totalTp3Hits: rec.totalTp3Hits || 0,
+            totalTp3Hits: rec.totalTp3Hits !== undefined ? rec.totalTp3Hits : (rec.tp3Hits || 0),
             totalTp3Dollars: rec.totalTp3Dollars || 0.0,
-            totalFullTpHits: rec.totalFullTpHits || 0,
+            totalFullTpHits: rec.totalFullTpHits !== undefined ? rec.totalFullTpHits : (rec.fullTpHits || 0),
             totalFullTpDollars: rec.totalFullTpDollars || 0.0,
-            totalSl8Hits: rec.totalSl8Hits || 0,
+            totalSl8Hits: rec.totalSl8Hits !== undefined ? rec.totalSl8Hits : (rec.sl8Hits || 0),
             totalSl8Dollars: rec.totalSl8Dollars || 0.0,
-            totalSl10Hits: rec.totalSl10Hits || 0,
+            totalSl10Hits: rec.totalSl10Hits !== undefined ? rec.totalSl10Hits : (rec.sl10Hits || 0),
             totalSl10Dollars: rec.totalSl10Dollars || 0.0,
-            totalSl12Hits: rec.totalSl12Hits || 0,
+            totalSl12Hits: rec.totalSl12Hits !== undefined ? rec.totalSl12Hits : (rec.sl12Hits || 0),
             totalSl12Dollars: rec.totalSl12Dollars || 0.0,
-            totalOriginalSlHits: rec.totalOriginalSlHits || 0,
+            totalOriginalSlHits: rec.totalOriginalSlHits !== undefined ? rec.totalOriginalSlHits : (rec.originalSlHits || 0),
             totalOriginalSlDollars: rec.totalOriginalSlDollars || 0.0,
             lastUpdated: rec.lastUpdated ? new Date(rec.lastUpdated).toISOString() : new Date().toISOString(),
           });
         }
       }
 
-      logger.info(`[AnalyticsEngine] Hydration Audit: ${v2Count} V2 active docs loaded, ${v1Count} V1 legacy docs detected & preserved, ${ignoredCount} docs ignored.`);
+      logger.info(`[AnalyticsEngine] Hydration Audit: ${v2Count} channel records loaded, ${this.pairStats.size} pair records loaded, ${ignoredCount} docs ignored.`);
     } catch (err) {
       logger.error('[AnalyticsEngine] Failed to hydrate analytics from MongoDB:', err);
     }
@@ -241,6 +232,31 @@ class AnalyticsEngineService {
     this.dirtyPairs.clear();
 
     return result;
+  }
+
+  /**
+   * Start background periodic auto-flushing of dirty analytics to MongoDB while service is running.
+   */
+  startAutoFlush(intervalMs = 5000) {
+    if (this.autoFlushTimer) return;
+    logger.info(`[AnalyticsEngine] Starting continuous background analytics auto-flush (${intervalMs}ms)...`);
+    this.autoFlushTimer = setInterval(() => {
+      this.flushDirtyAnalytics().catch((err) => {
+        logger.error(`[AnalyticsEngine] Background auto-flush error: ${err.message}`);
+      });
+    }, intervalMs);
+  }
+
+  /**
+   * Stop background periodic auto-flushing.
+   */
+  stopAutoFlush() {
+    if (this.autoFlushTimer) {
+      clearInterval(this.autoFlushTimer);
+      this.autoFlushTimer = null;
+      logger.info('[AnalyticsEngine] Stopped continuous background analytics auto-flush.');
+    }
+    return this.flushDirtyAnalytics();
   }
 
   /**
@@ -376,6 +392,19 @@ class AnalyticsEngineService {
         limit,
       },
     };
+  }
+  /**
+   * Alias for backward test compatibility
+   */
+  _recordHit(channelName, milestoneName, dollarValue) {
+    return this.recordMilestoneHit(channelName, milestoneName, dollarValue);
+  }
+
+  /**
+   * Alias for backward test compatibility
+   */
+  recordCompletedOutcome(channelName, outcomeName, dollarValue) {
+    return this.recordMilestoneHit(channelName, outcomeName, dollarValue);
   }
 }
 

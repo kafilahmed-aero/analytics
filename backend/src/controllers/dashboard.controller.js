@@ -26,7 +26,14 @@ const getDashboardSummary = asyncHandler(async (req, res) => {
 
 const getDashboardChannels = asyncHandler(async (req, res) => {
   const rawAnalytics = analyticsEngine.getChannelAnalytics(req.query);
-  const processed = processChannelQuery(rawAnalytics.channels || [], req.query);
+  
+  // Filter out verification/test channels from the live dashboard (Option A)
+  const TEST_KEYWORDS = ['VERIFY', 'TEST', 'DEMO', 'PROD_VERIFY', 'PROD_ALERTS'];
+  const filteredChannels = (rawAnalytics.channels || []).filter(
+    (chan) => !TEST_KEYWORDS.some((kw) => String(chan.channel || chan.identifier || '').toUpperCase().includes(kw))
+  );
+
+  const processed = processChannelQuery(filteredChannels, req.query);
 
   return res
     .status(HTTP_STATUS.OK)

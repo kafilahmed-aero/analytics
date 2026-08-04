@@ -1,6 +1,8 @@
 const logger = require('../utils/logger');
 const analyticsEvents = require('../events/analyticsEvents');
 const analyticsEngine = require('./analyticsEngine.service');
+const sessionPersistence = require('./sessionPersistence.service');
+const { normalizeSignal } = require('./signalNormalizer.service');
 const { calculateDerivedStopLosses, calculatePipDistance } = require('../utils/pipCalculator');
 
 // Analytics V2 is permanently XAUUSD-only
@@ -109,16 +111,18 @@ class SessionRegistry {
   }
 
   processRawSignal(rawSignal) {
-    if (!rawSignal || !rawSignal.id) {
+    // SessionRegistry operates on canonical signals (normalizes raw inputs)
+    const signal = normalizeSignal(rawSignal);
+    if (!signal || !signal.id) {
       logger.warn('[SessionRegistry] Validation Stage 1 Failed: Malformed payload (missing id)');
       return { success: false, reason: 'malformed_payload' };
     }
 
-    const signalId = String(rawSignal.id);
-    const pair = String(rawSignal.pair || rawSignal.symbol || '').toUpperCase();
-    const direction = String(rawSignal.direction || rawSignal.type || rawSignal.action || '').toUpperCase();
-    const entryPrice = parseFloat(rawSignal.entryPrice || rawSignal.entry);
-    const originalSl = parseFloat(rawSignal.originalSl || rawSignal.sl);
+    const signalId = String(signal.id);
+    const pair = String(signal.pair || '').toUpperCase();
+    const direction = String(signal.direction || '').toUpperCase();
+    const entryPrice = parseFloat(signal.entryPrice);
+    const originalSl = parseFloat(signal.originalSl);
 
     if (!pair || !direction || isNaN(entryPrice) || isNaN(originalSl)) {
       logger.warn(`[SessionRegistry] Validation Stage 1 Failed: Missing required trading fields on signal ${signalId}`);
@@ -131,8 +135,8 @@ class SessionRegistry {
     }
 
     const sessionId = this.generateSessionId(signalId);
-    const channel = String(rawSignal.channel || 'UNKNOWN').toUpperCase();
-    const messageId = rawSignal.messageId || signalId;
+    const channel = String(signal.channel || 'UNKNOWN').toUpperCase();
+    const messageId = signal.messageId || signalId;
     const messageKey = `${channel}:${messageId}`;
 
     if (this.signalIdIndex.has(signalId) || this.messageKeyIndex.has(messageKey) || this.processedKeys.has(sessionId)) {
@@ -140,19 +144,22 @@ class SessionRegistry {
       return { success: false, reason: 'duplicate_signal_ignored', signalId };
     }
 
-    const signalCreatedAtMs = new Date(rawSignal.createdAt || Date.now()).getTime();
-    if (signalCreatedAtMs < this.bootTimestamp && !rawSignal.bypassWatermark) {
-      logger.debug(`[SessionRegistry] Validation Stage 4 Ignored: Historical signal ${signalId}`);
+    const status = String(signal.status || '').toUpperCase();
+    const signalCreatedAtMs = new Date(signal.createdAt || Date.now()).getTime();
+
+    // FX Desk Pro is single source of truth for ACTIVE signals.
+    // If status = ACTIVE, accept or restore monitoring because it is an ACTIVE production signal.
+    // Historical CLOSED/TP/SL signals created before boot watermark are rejected.
+    const isActiveSignal = status === 'ACTIVE';
+    const isHistorical = signalCreatedAtMs < this.bootTimestamp;
+
+    if (isHistorical && !isActiveSignal) {
+      logger.debug(`[SessionRegistry] Validation Stage 4 Ignored: Historical closed signal ${signalId}`);
       return { success: false, reason: 'historical_signal_ignored', signalId };
     }
 
     const rawTps = [];
-    if (rawSignal.tp1) rawTps.push(rawSignal.tp1);
-    if (rawSignal.tp2) rawTps.push(rawSignal.tp2);
-    if (rawSignal.tp3) rawTps.push(rawSignal.tp3);
-    if (rawSignal.tp4) rawTps.push(rawSignal.tp4);
-    if (rawSignal.tp5) rawTps.push(rawSignal.tp5);
-    if (rawTps.length === 0 && rawSignal.target) rawTps.push(rawSignal.target);
+    rawTps.push(...(signal.targets || []));
 
     const tpQueue = this.buildTpQueue(rawTps);
     const slQueue = this.buildAdaptiveSlQueue(direction, entryPrice, originalSl);
@@ -162,7 +169,7 @@ class SessionRegistry {
       return { success: false, reason: 'invalid_tp_sl_queue', signalId };
     }
 
-    const fixedLotSize = parseFloat(rawSignal.fixedLotSize || rawSignal.lotSize || 0.01);
+    const fixedLotSize = parseFloat(signal.fixedLotSize || 0.01);
 
     const session = {
       sessionId,
@@ -233,6 +240,7 @@ class SessionRegistry {
 
     // Increment totalSignalsProcessed ONLY when a unique new session is successfully instantiated
     analyticsEngine.recordNewSignal(channel, SUPPORTED_PAIR);
+    sessionPersistence.markDirty(session);
 
     logger.info(`[SessionRegistry] Instantiated XAUUSD MonitoringSession ${sessionId} (${direction} @ ${entryPrice}, LotSize: ${session.fixedLotSize})`);
 
@@ -347,7 +355,7 @@ class SessionRegistry {
     sessionData.status = 'HYDRATED';
 
     if (!sessionData.recordedFlags) {
-      sessionData.recordedFlags = {
+      sessionData.milestoneDollars = {
         tp1Recorded: false,
         tp2Recorded: false,
         tp3Recorded: false,
@@ -428,6 +436,9 @@ class SessionRegistry {
     if (session.status !== 'COMPLETED_FULL_TP' && session.status !== 'COMPLETED_ORIGINAL_SL') {
       session.status = 'EVICTED';
     }
+    session.lastUpdated = new Date().toISOString();
+    session.isDirty = true;
+    sessionPersistence.markDirty(session);
     const { signalId, messageKey, channel } = session;
 
     this.sessions.delete(sessionId);
@@ -447,6 +458,12 @@ class SessionRegistry {
 
     analyticsEvents.emit('SESSION_EVICTED', { sessionId, evictedAt: new Date().toISOString() });
     return true;
+  }
+
+  registerPersistedSessions(sessionDocs = []) {
+    sessionDocs.forEach((doc) => {
+      if (doc && doc.sessionId) this.processedKeys.add(doc.sessionId);
+    });
   }
 
   checkMemoryThresholds() {

@@ -1,6 +1,7 @@
 const fxDeskProService = require('./fxdeskpro.service');
 const sessionRegistry = require('./activeSignalManager.service');
-const analyticsEngine = require('./analyticsEngine.service');
+const payloadContractGuard = require('./payloadContractGuard.service');
+const { normalizeSignal } = require('./signalNormalizer.service');
 const logger = require('../utils/logger');
 
 class ActiveSignalIngestionService {
@@ -38,6 +39,8 @@ class ActiveSignalIngestionService {
 
   /**
    * Execute one active signal polling pass.
+   * Architecture Flow:
+   * FX Desk Pro Payload -> Payload Contract Guard -> Signal Normalizer -> Canonical Signal -> SessionRegistry
    */
   async pollActiveSignals() {
     if (this.isPolling) return;
@@ -52,12 +55,22 @@ class ActiveSignalIngestionService {
         let ingestedCount = 0;
 
         for (const sig of signals) {
-          const pair = String(sig.pair || sig.symbol || '').toUpperCase();
+          // 1. Normalize FX Desk Pro payload to Canonical Analytics Signal model
+          const canonicalSignal = normalizeSignal(sig);
+
+          // 2. Guard canonical signal against contract mismatches
+          const guardResult = payloadContractGuard.validate(canonicalSignal);
+          if (!guardResult.valid) {
+            logger.error(`[ActiveSignalIngestion] Dropping payload due to contract mismatch: ${guardResult.error}`);
+            continue;
+          }
+
+          const pair = String(canonicalSignal.pair || '').toUpperCase();
           if (pair !== 'XAUUSD') continue; // XAUUSD-only constraint
 
-          const res = sessionRegistry.processRawSignal(sig);
+          // 3. Hand off canonical signal to SessionRegistry
+          const res = sessionRegistry.processRawSignal(canonicalSignal);
           if (res.success) {
-            analyticsEngine.recordNewSignal(sig.channel, 'XAUUSD');
             ingestedCount++;
           }
         }

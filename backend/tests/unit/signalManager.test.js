@@ -10,11 +10,11 @@ const runUnitTests = () => {
     const rawSig = {
       id: 'UNIT-DUP-001',
       channel: 'VIP_ALGO',
-      symbol: 'EURUSD',
+      symbol: 'XAUUSD',
       type: 'BUY',
-      entry: 1.0800,
-      sl: 1.0750,
-      tp1: 1.0850,
+      entry: 2300.00,
+      sl: 2290.00,
+      tp1: 2310.00,
       createdAt: new Date(Date.now() + 10000).toISOString(),
     };
 
@@ -25,7 +25,7 @@ const runUnitTests = () => {
       firstResult.success === true &&
       secondResult.success === false &&
       secondResult.reason === 'duplicate_signal_ignored' &&
-      activeSignalManager.activeSignals.size === 1
+      activeSignalManager.getActiveCount() === 1
     ) {
       results.passed += 1;
     } else {
@@ -43,11 +43,11 @@ const runUnitTests = () => {
     const oldSig = {
       id: 'UNIT-OLD-002',
       channel: 'VIP_ALGO',
-      symbol: 'EURUSD',
+      symbol: 'XAUUSD',
       type: 'BUY',
-      entry: 1.0800,
-      sl: 1.0750,
-      tp1: 1.0850,
+      entry: 2300.00,
+      sl: 2290.00,
+      tp1: 2310.00,
       createdAt: new Date(Date.now() - 3600000).toISOString(), // 1 hour old
     };
 
@@ -56,7 +56,7 @@ const runUnitTests = () => {
     if (
       result.success === false &&
       result.reason === 'historical_signal_ignored' &&
-      activeSignalManager.activeSignals.size === 0
+      activeSignalManager.getActiveCount() === 0
     ) {
       results.passed += 1;
     } else {

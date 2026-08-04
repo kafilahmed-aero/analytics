@@ -54,7 +54,8 @@ class TickDispatcher {
     };
 
     // 3. Update Health Monitor
-    priceFeedHealthMonitor.recordTick(timestamp);
+    const marketTimestamp = rawTick.marketTimestamp || rawTick.marketTime || null;
+    priceFeedHealthMonitor.recordTick(timestamp, marketTimestamp, price);
     this.lastProcessedSequence = sequence;
     this.lastTickTime = timestamp;
     this.totalTicksProcessed++;

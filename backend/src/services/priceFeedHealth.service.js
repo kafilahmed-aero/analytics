@@ -28,19 +28,29 @@ class PriceFeedHealthMonitor {
     }
 
     if (marketTime) {
+      const marketTimeMs = new Date(marketTime).getTime();
+      const marketAgeSec = !isNaN(marketTimeMs) ? (now - marketTimeMs) / 1000 : 0;
+
       if (this.lastMarketTime === marketTime) {
         this.sameTimestampPollCount++;
-        // If market timestamp remains unchanged across 5 consecutive polls, market is CLOSED (weekend/holiday)
-        if (this.sameTimestampPollCount >= 5) {
+        // If market timestamp remains unchanged across 5 consecutive polls or market timestamp > 5 mins old, market is CLOSED
+        if (this.sameTimestampPollCount >= 5 || marketAgeSec > 300) {
           this.marketStatus = 'CLOSED';
         }
       } else {
         this.sameTimestampPollCount = 0;
         this.lastMarketTime = marketTime;
-        this.marketStatus = 'OPEN';
+        if (marketAgeSec > 300) {
+          this.marketStatus = 'CLOSED';
+        } else {
+          this.marketStatus = 'OPEN';
+        }
       }
     } else {
-      this.marketStatus = 'OPEN';
+      // Keep existing status if marketTime not provided on this tick unless unitialized
+      if (this.marketStatus === 'UNKNOWN') {
+        this.marketStatus = 'OPEN';
+      }
     }
   }
 
@@ -61,15 +71,21 @@ class PriceFeedHealthMonitor {
   }
 
   getHealthSummary() {
+    const now = Date.now();
     const secondsSinceLastTick = this.lastTickReceived
-      ? Math.round((Date.now() - new Date(this.lastTickReceived).getTime()) / 1000)
+      ? Math.round((now - new Date(this.lastTickReceived).getTime()) / 1000)
       : null;
 
     if (secondsSinceLastTick !== null && secondsSinceLastTick >= 15) {
       this.marketStatus = 'STALE_FEED';
+    } else if (this.lastMarketTime) {
+      const marketTimeMs = new Date(this.lastMarketTime).getTime();
+      if (!isNaN(marketTimeMs) && (now - marketTimeMs) > 300000) { // 5 minutes old
+        this.marketStatus = 'CLOSED';
+      }
     }
 
-    const isHealthy = this.connectionState === 'CONNECTED' && secondsSinceLastTick !== null && secondsSinceLastTick < 15;
+    const isHealthy = this.connectionState === 'CONNECTED' && secondsSinceLastTick !== null && secondsSinceLastTick < 15 && this.marketStatus === 'OPEN';
 
     return {
       connectionState: this.connectionState,

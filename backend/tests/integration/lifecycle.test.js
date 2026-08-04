@@ -11,13 +11,13 @@ const runLifecycleTests = () => {
     const rawSig = {
       id: 'LIFE-101',
       channel: 'LIFECYCLE_CH',
-      symbol: 'USDJPY',
+      symbol: 'XAUUSD',
       type: 'BUY',
-      entry: 155.00,
-      sl: 154.50,
-      tp1: 155.50,
-      tp2: 156.00,
-      tp3: 156.50,
+      entry: 2300.00,
+      sl: 2290.00,
+      tp1: 2310.00,
+      tp2: 2320.00,
+      tp3: 2330.00,
       createdAt: new Date(Date.now() + 10000).toISOString(),
     };
 
@@ -25,18 +25,19 @@ const runLifecycleTests = () => {
     activeSignalManager.processRawSignal(rawSig);
 
     // 2. Evaluate TP1
-    monitoringEngine.processPriceTick('USDJPY', 155.60);
+    monitoringEngine.processPriceTick({ symbol: 'XAUUSD', price: 2315.00 });
     const channelStats1 = analyticsEngine.channelStats.get('LIFECYCLE_CH');
 
-    // 3. Evaluate TP2, TP3 & Full TP
-    monitoringEngine.processPriceTick('USDJPY', 156.60);
+    // 3. Evaluate TP2 & Full TP (TP3)
+    monitoringEngine.processPriceTick({ symbol: 'XAUUSD', price: 2325.00 });
+    monitoringEngine.processPriceTick({ symbol: 'XAUUSD', price: 2335.00 });
     const channelStats2 = analyticsEngine.channelStats.get('LIFECYCLE_CH');
 
     if (
-      channelStats1 && channelStats1.tp1Hits === 1 &&
-      channelStats2 && channelStats2.fullTpHits === 1 &&
-      channelStats2.totalSignals === 1 &&
-      activeSignalManager.activeSignals.size === 0
+      channelStats1 && (channelStats1.totalTp1Hits === 1 || channelStats1.tp1Hits === 1) &&
+      channelStats2 && (channelStats2.totalFullTpHits === 1 || channelStats2.fullTpHits === 1) &&
+      (channelStats2.totalSignalsProcessed === 1 || channelStats2.totalSignals === 1) &&
+      activeSignalManager.getActiveCount() === 0
     ) {
       results.passed += 1;
     } else {
