@@ -68,6 +68,12 @@ const runFxDeskProRecoveryTests = () => {
     const marketTimeISO = new Date().toISOString();
     tickDispatcher.processTick({
       symbol: 'XAUUSD',
+      price: 4090.0, // Trigger entry
+      marketTimestamp: marketTimeISO,
+      sequence: 100,
+    });
+    tickDispatcher.processTick({
+      symbol: 'XAUUSD',
       price: 4096.0,
       marketTimestamp: marketTimeISO,
       sequence: 101,

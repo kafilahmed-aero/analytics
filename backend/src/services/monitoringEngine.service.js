@@ -41,15 +41,19 @@ class MilestoneMonitoringEngine {
 
       session.lastTickPrice = price;
 
+      const isBuy = session.direction === 'BUY';
+
       if (session.status === 'WAITING_PRICE') {
+        const entryTriggered = isBuy ? price <= session.entryPrice : price >= session.entryPrice;
+        if (!entryTriggered) {
+          continue; // Keep waiting, do not monitor milestones yet
+        }
         session.status = 'MONITORING';
         session.isDirty = true;
         sessionPersistence.markDirty(session);
       }
       
       evaluatedCount++;
-
-      const isBuy = session.direction === 'BUY';
 
       // 1. EVALUATE SINGLE ACTIVE TP POINTER (Sequential TP Progression)
       const currentTp = session.tpQueue[session.activeTpPointer];

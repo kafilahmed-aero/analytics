@@ -25,6 +25,7 @@ const runLifecycleTests = () => {
     activeSignalManager.processRawSignal(rawSig);
 
     // 2. Evaluate TP1
+    monitoringEngine.processPriceTick({ symbol: 'XAUUSD', price: 2300.00 }); // Trigger entry
     monitoringEngine.processPriceTick({ symbol: 'XAUUSD', price: 2315.00 });
     const channelStats1 = analyticsEngine.channelStats.get('LIFECYCLE_CH');
 

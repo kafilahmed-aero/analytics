@@ -35,7 +35,8 @@ const runSimultaneousTests = () => {
     activeSignalManager.processRawSignal(buySig);
     activeSignalManager.processRawSignal(sellSig);
 
-    // Single price tick to 2315.00 (triggers TP1 for BUY, SL for SELL)
+    // Single price tick to 2300.00 to trigger entry, then 2315.00 (triggers TP1 for BUY, SL for SELL)
+    monitoringEngine.processPriceTick({ symbol: 'XAUUSD', price: 2300.00 }); // Trigger entry
     monitoringEngine.processPriceTick({ symbol: 'XAUUSD', price: 2315.00 });
 
     const statsA = analyticsEngine.channelStats.get('CHANNEL_A');
