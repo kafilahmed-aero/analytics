@@ -7,10 +7,6 @@ const channelAnalyticsSchema = new mongoose.Schema(
       required: false,
       index: true,
     },
-    identifier: {
-      type: String,
-      index: true,
-    },
     totalSignalsProcessed: {
       type: Number,
       default: 0,
