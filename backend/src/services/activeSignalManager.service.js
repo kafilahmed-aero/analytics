@@ -355,7 +355,7 @@ class SessionRegistry {
     sessionData.status = 'HYDRATED';
 
     if (!sessionData.recordedFlags) {
-      sessionData.milestoneDollars = {
+      sessionData.recordedFlags = {
         tp1Recorded: false,
         tp2Recorded: false,
         tp3Recorded: false,
@@ -368,15 +368,15 @@ class SessionRegistry {
     }
 
     if (!sessionData.milestoneDollars) {
-      sessionData.recordedFlags = {
-        tp1Dollar: 0,
-        tp2Dollar: 0,
-        tp3Dollar: 0,
-        fullTpDollar: 0,
-        sl8Dollar: 0,
-        sl10Dollar: 0,
-        sl12Dollar: 0,
-        originalSlDollar: 0,
+      sessionData.milestoneDollars = {
+        tp1Dollar: 0.0,
+        tp2Dollar: 0.0,
+        tp3Dollar: 0.0,
+        fullTpDollar: 0.0,
+        sl8Dollar: 0.0,
+        sl10Dollar: 0.0,
+        sl12Dollar: 0.0,
+        originalSlDollar: 0.0,
       };
     }
 
