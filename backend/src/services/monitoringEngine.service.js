@@ -4,6 +4,7 @@ const dollarLedgerService = require('./dollarLedger.service');
 const analyticsEngine = require('./analyticsEngine.service');
 const analyticsEvents = require('../events/analyticsEvents');
 const tickDispatcher = require('./tickDispatcher.service');
+const sessionPersistence = require('./sessionPersistence.service');
 
 class MilestoneMonitoringEngine {
   constructor() {
@@ -38,7 +39,12 @@ class MilestoneMonitoringEngine {
         continue;
       }
 
-      session.status = 'MONITORING';
+      if (session.status === 'WAITING_PRICE') {
+        session.status = 'MONITORING';
+        session.isDirty = true;
+        sessionPersistence.markDirty(session);
+      }
+      
       session.lastTickPrice = price;
       evaluatedCount++;
 
