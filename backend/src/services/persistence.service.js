@@ -33,10 +33,9 @@ class PersistenceService {
     try {
       if (channelRecords.length > 0) {
         const channelOps = channelRecords.map((rec) => {
-          rec.identifier = rec.identifier || rec.channel;
           return {
             updateOne: {
-              filter: { identifier: rec.identifier },
+              filter: { channel: rec.channel },
               update: { $set: rec },
               upsert: true,
             },
