@@ -4,6 +4,9 @@ const payloadContractGuard = require('./payloadContractGuard.service');
 const { normalizeSignal } = require('./signalNormalizer.service');
 const logger = require('../utils/logger');
 
+// Set ledger reset time to server boot time to ignore all pre-existing active signals
+const ledgerResetTime = new Date();
+
 class ActiveSignalIngestionService {
   constructor() {
     this.pollIntervalMs = 15000; // 15 seconds
@@ -60,7 +63,6 @@ class ActiveSignalIngestionService {
 
           // Filter out signals created before Ledger Reset Time to start clean from zero
           const signalCreatedAt = canonicalSignal.createdAt ? new Date(canonicalSignal.createdAt) : new Date();
-          const ledgerResetTime = new Date('2026-08-04T20:28:00.000Z');
           if (signalCreatedAt < ledgerResetTime) {
             continue;
           }
