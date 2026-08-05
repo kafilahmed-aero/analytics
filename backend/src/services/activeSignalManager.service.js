@@ -430,6 +430,16 @@ class SessionRegistry {
     return this.sessions.size;
   }
 
+  clearAllSessions() {
+    this.sessions.clear();
+    this.signalIdIndex.clear();
+    this.messageKeyIndex.clear();
+    this.pairIndex.clear();
+    this.channelIndex.clear();
+    this.processedKeys.clear();
+    logger.info('[SessionRegistry] Cleared all in-memory sessions and indexes.');
+  }
+
   evictSession(sessionId) {
     const session = this.sessions.get(sessionId);
     if (!session) return false;

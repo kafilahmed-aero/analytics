@@ -422,6 +422,9 @@ class AnalyticsEngineService {
     this.dirtyChannels.clear();
     this.dirtyPairs.clear();
 
+    const sessionRegistry = require('./activeSignalManager.service');
+    sessionRegistry.clearAllSessions();
+
     const ChannelAnalytics = require('../models/channelAnalytics.model');
     const PairAnalytics = require('../models/pairAnalytics.model');
     const MonitoringSession = require('../models/monitoringSession.model');
