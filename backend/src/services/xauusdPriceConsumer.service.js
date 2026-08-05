@@ -18,8 +18,9 @@ class XauusdPriceConsumerService {
 
     const frontMonth = this.getFrontMonthTicker();
 
-    // Independent primary and secondary market data endpoints (Spot Gold API & Yahoo Finance Futures)
+    // Independent primary and secondary market data endpoints
     this.endpoints = [
+      'https://forex-data-feed.swissquote.com/public-quotes/bboquotes/instrument/XAU/USD',
       'https://api.gold-api.com/price/XAU',
       `https://query1.finance.yahoo.com/v8/finance/chart/${frontMonth}?interval=1m&range=1d`,
       `https://query2.finance.yahoo.com/v8/finance/chart/${frontMonth}?interval=1m&range=1d`,
@@ -97,7 +98,17 @@ class XauusdPriceConsumerService {
           let price = null;
           let marketTimeISO = null;
 
-          if (url.includes('gold-api.com')) {
+          if (url.includes('swissquote.com')) {
+            const feed = data[0] || {};
+            const spreadPrices = feed.spreadProfilePrices || [];
+            const primeObj = spreadPrices.find(p => p.spreadProfile === 'prime') || spreadPrices[0] || {};
+            const bid = parseFloat(primeObj.bid);
+            const ask = parseFloat(primeObj.ask);
+            if (!isNaN(bid) && !isNaN(ask)) {
+              price = (bid + ask) / 2;
+            }
+            marketTimeISO = feed.ts ? new Date(feed.ts).toISOString() : new Date().toISOString();
+          } else if (url.includes('gold-api.com')) {
             price = parseFloat(data.price);
             marketTimeISO = data.updatedAt ? new Date(data.updatedAt).toISOString() : new Date().toISOString();
           } else {
