@@ -102,6 +102,48 @@ const runUnitTests = () => {
     results.errors.push(`Entry parser unit test error: ${err.message}`);
   }
 
+  // Test 4: Missing TP or SL Rejection
+  try {
+    resetTestState();
+    const sigNoSl = {
+      id: 'UNIT-NOSL-004',
+      channel: 'VIP_ALGO',
+      symbol: 'XAUUSD',
+      type: 'BUY',
+      entry: 2300.00,
+      tp1: 2310.00,
+      createdAt: new Date(Date.now() + 10000).toISOString(),
+    };
+    const sigNoTp = {
+      id: 'UNIT-NOTP-005',
+      channel: 'VIP_ALGO',
+      symbol: 'XAUUSD',
+      type: 'BUY',
+      entry: 2300.00,
+      sl: 2290.00,
+      createdAt: new Date(Date.now() + 10000).toISOString(),
+    };
+
+    const resNoSl = activeSignalManager.processRawSignal(sigNoSl);
+    const resNoTp = activeSignalManager.processRawSignal(sigNoTp);
+
+    if (
+      resNoSl.success === false &&
+      resNoSl.reason === 'missing_tp_or_sl' &&
+      resNoTp.success === false &&
+      resNoTp.reason === 'missing_tp_or_sl' &&
+      activeSignalManager.getActiveCount() === 0
+    ) {
+      results.passed += 1;
+    } else {
+      results.failed += 1;
+      results.errors.push('Signals missing SL or TP targets were not rejected cleanly');
+    }
+  } catch (err) {
+    results.failed += 1;
+    results.errors.push(`Missing TP/SL test error: ${err.message}`);
+  }
+
   return results;
 };
 

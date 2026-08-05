@@ -125,9 +125,9 @@ class SessionRegistry {
     const entryPrice = parseFloat(signal.entryPrice);
     const originalSl = parseFloat(signal.originalSl);
 
-    if (!pair || !direction || isNaN(entryPrice) || isNaN(originalSl)) {
-      logger.warn(`[SessionRegistry] Validation Stage 1 Failed: Missing required trading fields on signal ${signalId}`);
-      return { success: false, reason: 'malformed_payload', signalId };
+    if (!pair || !direction || isNaN(entryPrice) || isNaN(originalSl) || originalSl <= 0 || !Array.isArray(signal.targets) || signal.targets.length === 0) {
+      logger.warn(`[SessionRegistry] Validation Stage 1 Failed: Missing required trading fields, TP targets, or SL on signal ${signalId}`);
+      return { success: false, reason: 'missing_tp_or_sl', signalId };
     }
 
     if (pair !== SUPPORTED_PAIR) {
