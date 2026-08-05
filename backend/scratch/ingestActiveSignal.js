@@ -40,6 +40,11 @@ const run = async () => {
     const result = sessionRegistry.processRawSignal(canonical);
     console.log('Result:', result);
 
+    console.log('Flushing session to database...');
+    const sessionPersistence = require('../src/services/sessionPersistence.service');
+    const flushRes = await sessionPersistence.flush();
+    console.log('Flush result:', flushRes);
+
     // Wait a brief moment to allow mongoose to finish saving to database
     await new Promise((resolve) => setTimeout(resolve, 2000));
     console.log('Ingested successfully.');
