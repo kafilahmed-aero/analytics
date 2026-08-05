@@ -29,7 +29,7 @@ const normalizeSignal = (raw = {}) => {
     entryPrice: averagedEntryPrice,
     originalSl: source.originalSl ?? source.sl ?? source.stopLoss,
     targets: targets.length > 0 ? targets : legacyTargets,
-    channel: source.channel,
+    channel: source.channelTitle || source.channel,
     messageId: source.messageId || (rawId ? String(rawId) : undefined),
     createdAt: source.createdAt || source.timestamp || source.createdAtDate,
     status: source.status || source.signalStatus,
