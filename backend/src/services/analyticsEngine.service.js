@@ -389,13 +389,13 @@ class AnalyticsEngineService {
       sl12Dollars: row.totalSl12Dollars,
     }));
 
-    const limit = parseInt(query.limit, 10) || 50;
+    const limit = query.limit ? parseInt(query.limit, 10) : null;
 
     return {
-      channels: list.slice(0, limit),
+      channels: limit ? list.slice(0, limit) : list,
       pagination: {
         total: list.length,
-        limit,
+        limit: limit || list.length,
       },
     };
   }
