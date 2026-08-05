@@ -1,6 +1,7 @@
 const endpoints = [
-  'https://api.gold-api.com/price/XAU',
-  'https://query1.finance.yahoo.com/v8/finance/chart/GCZ26.CMX?interval=1m&range=1d',
+  'https://query1.finance.yahoo.com/v8/finance/chart/XAU=X?interval=1m&range=1d',
+  'https://query1.finance.yahoo.com/v8/finance/chart/GLD?interval=1m&range=1d',
+  'https://query1.finance.yahoo.com/v8/finance/chart/GCUSD=X?interval=1m&range=1d',
 ];
 
 const run = async () => {
@@ -15,13 +16,9 @@ const run = async () => {
       });
       if (response.ok) {
         const data = await response.json();
-        if (url.includes('gold-api.com')) {
-          console.log(`Gold API price: ${data.price}, updatedAt: ${data.updatedAt}`);
-        } else {
-          const meta = data.chart?.result?.[0]?.meta;
-          const price = meta?.regularMarketPrice || meta?.chartPreviousClose;
-          console.log(`Yahoo price: ${price}`);
-        }
+        const meta = data.chart?.result?.[0]?.meta;
+        const price = meta?.regularMarketPrice || meta?.chartPreviousClose;
+        console.log(`Yahoo price for ${meta?.symbol}: ${price}`);
       } else {
         console.log(`Failed: ${response.status} ${response.statusText}`);
       }
