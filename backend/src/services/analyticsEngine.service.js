@@ -412,6 +412,26 @@ class AnalyticsEngineService {
   recordCompletedOutcome(channelName, outcomeName, dollarValue) {
     return this.recordMilestoneHit(channelName, outcomeName, dollarValue);
   }
+
+  /**
+   * Reset all in-memory analytics and database collections
+   */
+  async resetAllAnalytics() {
+    this.channelStats.clear();
+    this.pairStats.clear();
+    this.dirtyChannels.clear();
+    this.dirtyPairs.clear();
+
+    const ChannelAnalytics = require('../models/channelAnalytics.model');
+    const PairAnalytics = require('../models/pairAnalytics.model');
+    const MonitoringSession = require('../models/monitoringSession.model');
+
+    await ChannelAnalytics.deleteMany({});
+    await PairAnalytics.deleteMany({});
+    await MonitoringSession.deleteMany({});
+
+    logger.info('[AnalyticsEngine] In-memory cache and MongoDB database collections reset successfully.');
+  }
 }
 
 module.exports = new AnalyticsEngineService();
