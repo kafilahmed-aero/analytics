@@ -57,12 +57,13 @@ class SessionRegistry {
 
     let selectedTps = [];
     if (validTps.length >= 5) {
-      // 5 TP rule: TP1, TP2, TP3, TP5 = Full TP (TP4 is NEVER monitored)
+      // 5 TP rule: TP1, TP2, TP3, and the last TP in target list is monitored as Full TP (TP4 is NEVER monitored)
+      const lastIdx = validTps.length - 1;
       selectedTps = [
         { level: 1, price: validTps[0], isFullTp: false },
         { level: 2, price: validTps[1], isFullTp: false },
         { level: 3, price: validTps[2], isFullTp: false },
-        { level: 5, price: validTps[4], isFullTp: true },
+        { level: validTps.length, price: validTps[lastIdx], isFullTp: true },
       ];
     } else {
       const capped = validTps.slice(0, 4);

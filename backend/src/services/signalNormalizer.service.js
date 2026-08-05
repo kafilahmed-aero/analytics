@@ -1,3 +1,5 @@
+const { parseEntryPrice } = require('../utils/entryParser');
+
 /** Converts FX Desk Pro and legacy Analytics fields into one session contract. */
 const normalizeSignal = (raw = {}) => {
   const source = raw && typeof raw === 'object' ? raw : {};
@@ -12,7 +14,7 @@ const normalizeSignal = (raw = {}) => {
     id: rawId ? String(rawId) : undefined,
     pair: source.pair || source.symbol,
     direction: source.direction || source.type || source.action,
-    entryPrice: source.entryPrice ?? source.entry,
+    entryPrice: parseEntryPrice(source.entryPrice ?? source.entry),
     originalSl: source.originalSl ?? source.sl ?? source.stopLoss,
     targets: targets.length > 0 ? targets : legacyTargets,
     channel: source.channel,

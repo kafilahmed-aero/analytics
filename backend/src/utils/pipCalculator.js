@@ -3,14 +3,14 @@
  * Analytics V2 is permanently XAUUSD-only.
  * 
  * Standard Gold Pip Conventions:
- * - 1 Gold Point = 10 pips ($1.00 price move)
- * - 1 Pip = 0.10 Gold Points ($0.10 price move)
- * - 8 Pips = 0.80 Gold Points
- * - 10 Pips = 1.00 Gold Point
- * - 12 Pips = 1.20 Gold Points
+ * - 1 Gold Point = 1 pip ($1.00 price move)
+ * - 1 Pip = 1.00 Gold Points ($1.00 price move)
+ * - 8 Pips = 8.00 Gold Points
+ * - 10 Pips = 10.00 Gold Points
+ * - 12 Pips = 12.00 Gold Points
  */
 
-const PIP_SIZE = 0.10;
+const PIP_SIZE = 1.00;
 
 const calculateDerivedStopLosses = (direction, entryPrice) => {
   const price = parseFloat(entryPrice);

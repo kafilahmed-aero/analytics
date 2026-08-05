@@ -112,7 +112,7 @@ class MilestoneMonitoringEngine {
    */
   processTpHit(session, tp, hitPrice, timestamp) {
     const level = tp.level;
-    const flagKey = level === 1 ? 'tp1Recorded' : level === 2 ? 'tp2Recorded' : level === 3 ? 'tp3Recorded' : 'fullTpRecorded';
+    const flagKey = tp.isFullTp ? 'fullTpRecorded' : (level === 1 ? 'tp1Recorded' : level === 2 ? 'tp2Recorded' : level === 3 ? 'tp3Recorded' : 'fullTpRecorded');
 
     // Deduplication check: Prevent duplicate recording of already processed milestone
     if (session.recordedFlags[flagKey]) {
@@ -133,7 +133,7 @@ class MilestoneMonitoringEngine {
     );
 
     // Record Milestone Dollar in Session
-    const dollarKey = level === 1 ? 'tp1Dollar' : level === 2 ? 'tp2Dollar' : level === 3 ? 'tp3Dollar' : 'fullTpDollar';
+    const dollarKey = tp.isFullTp ? 'fullTpDollar' : (level === 1 ? 'tp1Dollar' : level === 2 ? 'tp2Dollar' : level === 3 ? 'tp3Dollar' : 'fullTpDollar');
     session.milestoneDollars[dollarKey] = dollarVal;
     if (tp.isFullTp) {
       session.milestoneDollars.fullTpDollar = dollarVal;

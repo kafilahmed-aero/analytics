@@ -68,6 +68,40 @@ const runUnitTests = () => {
     results.errors.push(`Historical signal error: ${err.message}`);
   }
 
+  // Test 3: Entry Price Parsing and Range Averaging
+  try {
+    const { parseEntryPrice } = require('../../src/utils/entryParser');
+
+    const cases = [
+      { input: '4170-4174', expected: 4172 },
+      { input: '4170 to 4174', expected: 4172 },
+      { input: '4170/4174', expected: 4172 },
+      { input: '4170_4174', expected: 4172 },
+      { input: '4165.4164', expected: 4164.5 },
+      { input: 4174, expected: 4174 },
+      { input: '4174.50', expected: 4174.5 },
+      { input: '4165.500', expected: 4165.5 },
+    ];
+
+    let allCasesPassed = true;
+    for (const c of cases) {
+      const res = parseEntryPrice(c.input);
+      if (res !== c.expected) {
+        allCasesPassed = false;
+        results.errors.push(`Entry parser failed for input "${c.input}": expected ${c.expected}, got ${res}`);
+      }
+    }
+
+    if (allCasesPassed) {
+      results.passed += 1;
+    } else {
+      results.failed += 1;
+    }
+  } catch (err) {
+    results.failed += 1;
+    results.errors.push(`Entry parser unit test error: ${err.message}`);
+  }
+
   return results;
 };
 
