@@ -381,6 +381,8 @@ class SessionRegistry {
       };
     }
 
+    const originalStatus = sessionData.status;
+
     this.sessions.set(sessionId, sessionData);
     this.signalIdIndex.set(signalId, sessionId);
     this.messageKeyIndex.set(messageKey, sessionId);
@@ -393,7 +395,11 @@ class SessionRegistry {
 
     this.processedKeys.add(sessionId);
 
-    sessionData.status = 'WAITING_PRICE';
+    if (originalStatus === 'MONITORING') {
+      sessionData.status = 'MONITORING';
+    } else {
+      sessionData.status = 'WAITING_PRICE';
+    }
   }
 
   getSessionById(sessionId) {

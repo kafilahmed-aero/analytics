@@ -39,12 +39,21 @@ class MilestoneMonitoringEngine {
         continue;
       }
 
+      const previousPrice = session.lastTickPrice;
       session.lastTickPrice = price;
 
       const isBuy = session.direction === 'BUY';
 
       if (session.status === 'WAITING_PRICE') {
-        const entryTriggered = isBuy ? price <= session.entryPrice : price >= session.entryPrice;
+        let entryTriggered = false;
+        if (previousPrice !== null && previousPrice !== undefined) {
+          const crossedAbove = previousPrice < session.entryPrice && price >= session.entryPrice;
+          const crossedBelow = previousPrice > session.entryPrice && price <= session.entryPrice;
+          entryTriggered = crossedAbove || crossedBelow;
+        } else {
+          entryTriggered = (price === session.entryPrice);
+        }
+
         if (!entryTriggered) {
           continue; // Keep waiting, do not monitor milestones yet
         }
