@@ -27,11 +27,22 @@ const getActiveSignals = asyncHandler(async (req, res) => {
 
     if (Array.isArray(signals)) {
       signals.forEach((sig) => {
+        let averagedEntryPrice;
+        if (Array.isArray(sig.entryRange) && sig.entryRange.length > 0) {
+          if (sig.entryRange.length >= 2) {
+            averagedEntryPrice = sig.entryRange.reduce((a, b) => a + b, 0) / sig.entryRange.length;
+          } else {
+            averagedEntryPrice = parseEntryPrice(sig.entryRange[0]);
+          }
+        } else {
+          averagedEntryPrice = parseEntryPrice(sig.entryPrice ?? sig.entry);
+        }
+
         if (sig.entry !== undefined) {
-          sig.entry = parseEntryPrice(sig.entry);
+          sig.entry = averagedEntryPrice;
         }
         if (sig.entryPrice !== undefined) {
-          sig.entryPrice = parseEntryPrice(sig.entryPrice);
+          sig.entryPrice = averagedEntryPrice;
         }
       });
     }
