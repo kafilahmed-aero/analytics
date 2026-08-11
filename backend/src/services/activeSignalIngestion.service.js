@@ -4,9 +4,6 @@ const payloadContractGuard = require('./payloadContractGuard.service');
 const { normalizeSignal } = require('./signalNormalizer.service');
 const logger = require('../utils/logger');
 
-// Set ledger reset time to server boot time to ignore all pre-existing active signals
-const ledgerResetTime = new Date();
-
 class ActiveSignalIngestionService {
   constructor() {
     this.pollIntervalMs = 15000; // 15 seconds
@@ -60,12 +57,6 @@ class ActiveSignalIngestionService {
         for (const sig of signals) {
           // 1. Normalize FX Desk Pro payload to Canonical Analytics Signal model
           const canonicalSignal = normalizeSignal(sig);
-
-          // Filter out signals created before Ledger Reset Time to start clean from zero
-          const signalCreatedAt = canonicalSignal.createdAt ? new Date(canonicalSignal.createdAt) : new Date();
-          if (signalCreatedAt < ledgerResetTime) {
-            continue;
-          }
 
           // 2. Guard canonical signal against contract mismatches
           const guardResult = payloadContractGuard.validate(canonicalSignal);
