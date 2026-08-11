@@ -4,6 +4,8 @@ const payloadContractGuard = require('./payloadContractGuard.service');
 const { normalizeSignal } = require('./signalNormalizer.service');
 const logger = require('../utils/logger');
 
+const ingestionStartWatermark = new Date();
+
 class ActiveSignalIngestionService {
   constructor() {
     this.pollIntervalMs = 15000; // 15 seconds
@@ -57,6 +59,12 @@ class ActiveSignalIngestionService {
         for (const sig of signals) {
           // 1. Normalize FX Desk Pro payload to Canonical Analytics Signal model
           const canonicalSignal = normalizeSignal(sig);
+
+          // Only accept signals created after this fresh start watermark
+          const signalCreatedAt = canonicalSignal.createdAt ? new Date(canonicalSignal.createdAt) : new Date();
+          if (signalCreatedAt < ingestionStartWatermark) {
+            continue;
+          }
 
           // 2. Guard canonical signal against contract mismatches
           const guardResult = payloadContractGuard.validate(canonicalSignal);
