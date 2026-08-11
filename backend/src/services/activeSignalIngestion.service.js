@@ -4,7 +4,9 @@ const payloadContractGuard = require('./payloadContractGuard.service');
 const { normalizeSignal } = require('./signalNormalizer.service');
 const logger = require('../utils/logger');
 
-const ingestionStartWatermark = new Date();
+// Fixed baseline watermark date: 2026-08-12 01:26:00 IST (2026-08-11T19:56:00.000Z)
+// All signals created from this moment forward will be accumulated and permanently retained across all future redeployments.
+const ingestionStartWatermark = new Date('2026-08-11T19:56:00.000Z');
 
 class ActiveSignalIngestionService {
   constructor() {
