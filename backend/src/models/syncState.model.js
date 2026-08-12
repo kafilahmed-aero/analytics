@@ -1,8 +1,3 @@
-/**
- * DEPRECATED IN ANALYTICS V2 PHASE 1
- * SyncState schema is retained as LEGACY for backward compatibility with V1 cursor metadata.
- * Analytics V2 persists MonitoringSession FSM states in the monitoringsessions collection.
- */
 const mongoose = require('mongoose');
 
 const syncStateSchema = new mongoose.Schema(
@@ -10,6 +5,10 @@ const syncStateSchema = new mongoose.Schema(
     _id: {
       type: String,
       default: 'sync_metadata',
+    },
+    baselineWatermark: {
+      type: Date,
+      default: () => new Date('2026-08-12T09:17:18.000Z'),
     },
     lastCursor: {
       type: String,

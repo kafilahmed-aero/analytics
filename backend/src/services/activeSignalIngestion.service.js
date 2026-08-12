@@ -2,11 +2,10 @@ const fxDeskProService = require('./fxdeskpro.service');
 const sessionRegistry = require('./activeSignalManager.service');
 const payloadContractGuard = require('./payloadContractGuard.service');
 const { normalizeSignal } = require('./signalNormalizer.service');
+const SyncState = require('../models/syncState.model');
 const logger = require('../utils/logger');
 
-// Dynamic Baseline Watermark: Default to 2026-08-12 14:44:03 IST (2026-08-12T09:14:03.000Z)
-// All signals created from this moment forward will be processed and tracked.
-const DEFAULT_WATERMARK = '2026-08-12T09:14:03.000Z';
+const DEFAULT_WATERMARK = '2026-08-12T09:17:18.000Z';
 
 class ActiveSignalIngestionService {
   constructor() {
@@ -16,9 +15,37 @@ class ActiveSignalIngestionService {
     this.watermark = new Date(process.env.ANALYTICS_BASELINE_WATERMARK || DEFAULT_WATERMARK);
   }
 
-  setWatermark(newDate = new Date()) {
+  async loadWatermarkFromDatabase() {
+    try {
+      const doc = await SyncState.findById('sync_metadata');
+      if (doc && doc.baselineWatermark) {
+        this.watermark = new Date(doc.baselineWatermark);
+        logger.info(`[ActiveSignalIngestion] Loaded persistent baseline watermark from MongoDB: ${this.watermark.toISOString()}`);
+      } else {
+        await SyncState.findByIdAndUpdate(
+          'sync_metadata',
+          { baselineWatermark: this.watermark, lastSyncAt: new Date() },
+          { upsert: true, new: true }
+        );
+        logger.info(`[ActiveSignalIngestion] Initialized persistent baseline watermark in MongoDB: ${this.watermark.toISOString()}`);
+      }
+    } catch (err) {
+      logger.error(`[ActiveSignalIngestion] Error loading watermark from MongoDB: ${err.message}`);
+    }
+  }
+
+  async setWatermark(newDate = new Date()) {
     this.watermark = new Date(newDate);
     logger.info(`[ActiveSignalIngestion] Baseline watermark updated to: ${this.watermark.toISOString()}`);
+    try {
+      await SyncState.findByIdAndUpdate(
+        'sync_metadata',
+        { baselineWatermark: this.watermark, lastSyncAt: new Date() },
+        { upsert: true, new: true }
+      );
+    } catch (err) {
+      logger.error(`[ActiveSignalIngestion] Failed to persist watermark to MongoDB: ${err.message}`);
+    }
   }
 
   getWatermark() {
@@ -28,8 +55,10 @@ class ActiveSignalIngestionService {
   /**
    * Start periodic active signal polling bridge from FX Desk Pro.
    */
-  start() {
+  async start() {
     if (this.pollTimer) return;
+    await this.loadWatermarkFromDatabase();
+
     logger.info(`[ActiveSignalIngestion] Starting active signal polling bridge (15s interval, watermark: ${this.watermark.toISOString()})...`);
 
     // Trigger initial poll pass
@@ -72,7 +101,7 @@ class ActiveSignalIngestionService {
           // 1. Normalize FX Desk Pro payload to Canonical Analytics Signal model
           const canonicalSignal = normalizeSignal(sig);
 
-          // Only accept signals created AFTER the current watermark timestamp
+          // Only accept signals created AFTER the persistent watermark timestamp
           const signalCreatedAt = canonicalSignal.createdAt ? new Date(canonicalSignal.createdAt) : new Date();
           if (signalCreatedAt < this.watermark) {
             continue;
