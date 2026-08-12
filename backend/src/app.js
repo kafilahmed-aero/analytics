@@ -34,6 +34,18 @@ app.use(express.urlencoded({ extended: true, limit: '10kb' }));
 // HTTP request logging
 app.use(loggerMiddleware);
 
+// Root and Health endpoints for UptimeRobot monitoring ping
+app.get(['/', '/health'], (req, res) => {
+  return res.status(200).json({
+    status: 'HEALTHY',
+    service: 'FX Desk Pro Analytics Backend',
+    uptime: `${Math.floor(process.uptime())}s`,
+    timestamp: new Date().toISOString(),
+    baselineTimestamp: process.env.ANALYTICS_BASELINE_WATERMARK || '2026-08-12T09:03:17.000Z',
+    uptimeRobotConnected: true,
+  });
+});
+
 // Rate limiting for API endpoints
 app.use('/api', apiRateLimiter);
 

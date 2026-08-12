@@ -351,9 +351,12 @@ class AnalyticsEngineService {
       (chan) => !TEST_KEYWORDS.some((kw) => chan.includes(kw))
     ).length;
 
+    const baselineTimestamp = process.env.ANALYTICS_BASELINE_WATERMARK || '2026-08-12T09:03:17.000Z';
+
     return {
       serverStatus: 'online',
       uptime: `${uptimeSec}s`,
+      baselineTimestamp,
       channelsTracked: liveChannelsCount,
       pairsTracked: liveChannelsCount > 0 ? 1 : 0,
       totalSignalsProcessed,
@@ -414,7 +417,7 @@ class AnalyticsEngineService {
   }
 
   /**
-   * Reset all in-memory analytics and database collections
+   * Reset all in-memory analytics, database collections, and snapshot backup file
    */
   async resetAllAnalytics() {
     this.channelStats.clear();
@@ -428,12 +431,16 @@ class AnalyticsEngineService {
     const ChannelAnalytics = require('../models/channelAnalytics.model');
     const PairAnalytics = require('../models/pairAnalytics.model');
     const MonitoringSession = require('../models/monitoringSession.model');
+    const backupRestoreService = require('./backupRestore.service');
 
     await ChannelAnalytics.deleteMany({});
     await PairAnalytics.deleteMany({});
     await MonitoringSession.deleteMany({});
 
-    logger.info('[AnalyticsEngine] In-memory cache and MongoDB database collections reset successfully.');
+    // Reset local backup snapshot file as well
+    await backupRestoreService.createSnapshot();
+
+    logger.info('[AnalyticsEngine] In-memory cache, MongoDB collections, and backup snapshot reset successfully.');
   }
 }
 

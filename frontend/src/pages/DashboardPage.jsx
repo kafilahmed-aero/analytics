@@ -14,6 +14,7 @@ export const DashboardPage = () => {
     isInitialLoading,
     isRefreshing,
     error,
+    refreshData,
   } = useDashboardData();
 
   return (
@@ -33,7 +34,7 @@ export const DashboardPage = () => {
       <FxDeskProConnectionCard />
 
       {/* 4. Cumulative Performance Summary */}
-      <DashboardSummaryCards summary={summary} isRefreshing={isRefreshing} />
+      <DashboardSummaryCards summary={summary} isRefreshing={isRefreshing} onRefresh={refreshData} />
 
       {/* 5. Channel Analytics Table (Displays all channels, ranked by Total Signals DESC) */}
       <AnalyticsTable

@@ -7,7 +7,7 @@ const sessionHydrationService = require('./services/sessionHydration.service');
 const sessionPersistenceService = require('./services/sessionPersistence.service');
 const activeSignalIngestionService = require('./services/activeSignalIngestion.service');
 const xauusdPriceConsumerService = require('./services/xauusdPriceConsumer.service');
-const monitoringEngine = require('./services/monitoringEngine.service');
+const backupRestoreService = require('./services/backupRestore.service');
 const logger = require('./utils/logger');
 
 let server;
@@ -18,6 +18,9 @@ const startServer = async () => {
 
   // 2. Connect to MongoDB database
   await connectDatabase();
+
+  // 2b. Auto-restore from persistent backup snapshot if database is empty on boot/redeployment
+  await backupRestoreService.checkAndAutoRestoreOnBoot();
 
   // 3. Hydrate AnalyticsEngine in-memory live state from database
   await analyticsEngine.hydrateFromDatabase();
@@ -55,6 +58,13 @@ const shutdownGracefully = async (signal) => {
     await analyticsEngine.stopAutoFlush();
   } catch (err) {
     logger.error('Error stopping persistence services on shutdown:', err.message);
+  }
+
+  // Save persistent backup snapshot before exit
+  try {
+    await backupRestoreService.createSnapshot();
+  } catch (err) {
+    logger.error('Error creating backup snapshot on shutdown:', err.message);
   }
 
   if (server) {
