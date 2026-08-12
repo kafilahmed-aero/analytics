@@ -8,7 +8,7 @@ const syncStateSchema = new mongoose.Schema(
     },
     baselineWatermark: {
       type: Date,
-      default: () => new Date('2026-08-12T09:17:18.000Z'),
+      default: () => new Date('2026-08-12T09:21:12.000Z'),
     },
     lastCursor: {
       type: String,

@@ -5,7 +5,7 @@ const { normalizeSignal } = require('./signalNormalizer.service');
 const SyncState = require('../models/syncState.model');
 const logger = require('../utils/logger');
 
-const DEFAULT_WATERMARK = '2026-08-12T09:17:18.000Z';
+const DEFAULT_WATERMARK = '2026-08-12T09:21:12.000Z';
 
 class ActiveSignalIngestionService {
   constructor() {
