@@ -351,7 +351,8 @@ class AnalyticsEngineService {
       (chan) => !TEST_KEYWORDS.some((kw) => chan.includes(kw))
     ).length;
 
-    const baselineTimestamp = process.env.ANALYTICS_BASELINE_WATERMARK || '2026-08-12T09:03:17.000Z';
+    const activeSignalIngestion = require('./activeSignalIngestion.service');
+    const baselineTimestamp = activeSignalIngestion.getWatermark();
 
     return {
       serverStatus: 'online',
@@ -428,6 +429,9 @@ class AnalyticsEngineService {
     const sessionRegistry = require('./activeSignalManager.service');
     sessionRegistry.clearAllSessions();
 
+    const activeSignalIngestion = require('./activeSignalIngestion.service');
+    activeSignalIngestion.setWatermark(new Date());
+
     const ChannelAnalytics = require('../models/channelAnalytics.model');
     const PairAnalytics = require('../models/pairAnalytics.model');
     const MonitoringSession = require('../models/monitoringSession.model');
@@ -440,7 +444,7 @@ class AnalyticsEngineService {
     // Reset local backup snapshot file as well
     await backupRestoreService.createSnapshot();
 
-    logger.info('[AnalyticsEngine] In-memory cache, MongoDB collections, and backup snapshot reset successfully.');
+    logger.info('[AnalyticsEngine] In-memory cache, MongoDB collections, baseline watermark, and backup snapshot reset successfully.');
   }
 }
 

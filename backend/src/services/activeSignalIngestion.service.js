@@ -4,17 +4,25 @@ const payloadContractGuard = require('./payloadContractGuard.service');
 const { normalizeSignal } = require('./signalNormalizer.service');
 const logger = require('../utils/logger');
 
-// Fresh Start Baseline Watermark: 2026-08-12 14:33:17 IST (2026-08-12T09:03:17.000Z)
-// All signals created from this timestamp forward will be processed, accumulated and backed up for zero loss across redeployments.
-const DEFAULT_WATERMARK = '2026-08-12T09:03:17.000Z';
-const ingestionStartWatermark = new Date(process.env.ANALYTICS_BASELINE_WATERMARK || DEFAULT_WATERMARK);
-
+// Dynamic Baseline Watermark: Default to 2026-08-12 14:44:03 IST (2026-08-12T09:14:03.000Z)
+// All signals created from this moment forward will be processed and tracked.
+const DEFAULT_WATERMARK = '2026-08-12T09:14:03.000Z';
 
 class ActiveSignalIngestionService {
   constructor() {
     this.pollIntervalMs = 15000; // 15 seconds
     this.pollTimer = null;
     this.isPolling = false;
+    this.watermark = new Date(process.env.ANALYTICS_BASELINE_WATERMARK || DEFAULT_WATERMARK);
+  }
+
+  setWatermark(newDate = new Date()) {
+    this.watermark = new Date(newDate);
+    logger.info(`[ActiveSignalIngestion] Baseline watermark updated to: ${this.watermark.toISOString()}`);
+  }
+
+  getWatermark() {
+    return this.watermark.toISOString();
   }
 
   /**
@@ -22,7 +30,7 @@ class ActiveSignalIngestionService {
    */
   start() {
     if (this.pollTimer) return;
-    logger.info('[ActiveSignalIngestion] Starting active signal polling bridge (15s interval)...');
+    logger.info(`[ActiveSignalIngestion] Starting active signal polling bridge (15s interval, watermark: ${this.watermark.toISOString()})...`);
 
     // Trigger initial poll pass
     this.pollActiveSignals();
@@ -64,9 +72,9 @@ class ActiveSignalIngestionService {
           // 1. Normalize FX Desk Pro payload to Canonical Analytics Signal model
           const canonicalSignal = normalizeSignal(sig);
 
-          // Only accept signals created after this fresh start watermark
+          // Only accept signals created AFTER the current watermark timestamp
           const signalCreatedAt = canonicalSignal.createdAt ? new Date(canonicalSignal.createdAt) : new Date();
-          if (signalCreatedAt < ingestionStartWatermark) {
+          if (signalCreatedAt < this.watermark) {
             continue;
           }
 
