@@ -46,20 +46,31 @@ class MilestoneMonitoringEngine {
 
       if (session.status === 'WAITING_PRICE') {
         let entryTriggered = false;
-        if (previousPrice !== null && previousPrice !== undefined) {
+
+        // 1. Explicit NOW or MARKET entry signals activate immediately on first tick
+        if (session.entryType === 'NOW' || session.entryType === 'MARKET') {
+          entryTriggered = true;
+        }
+        // 2. Price crossover evaluation: detects when live market price crosses entry level
+        else if (previousPrice !== null && previousPrice !== undefined) {
           const crossedAbove = previousPrice < session.entryPrice && price >= session.entryPrice;
           const crossedBelow = previousPrice > session.entryPrice && price <= session.entryPrice;
           entryTriggered = crossedAbove || crossedBelow;
-        } else {
-          entryTriggered = (price === session.entryPrice);
+        }
+        // 3. Direct price match check
+        else if (price === session.entryPrice) {
+          entryTriggered = true;
         }
 
         if (!entryTriggered) {
-          continue; // Keep waiting, do not monitor milestones yet
+          continue; // Keep waiting in WAITING_PRICE state; do not monitor milestones yet
         }
+
+        // Entry triggered! Transition session status to MONITORING
         session.status = 'MONITORING';
         session.isDirty = true;
         sessionPersistence.markDirty(session);
+        logger.info(`[MonitoringEngine] Signal ${session.sessionId} (${session.direction} ${session.pair}) ENTRY FILLED at price ${price}. Transitioned to MONITORING.`);
       }
       
       evaluatedCount++;
